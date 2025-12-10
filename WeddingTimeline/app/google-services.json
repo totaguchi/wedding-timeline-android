@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "272762346028",
+    "project_id": "weddingtimeline-d67a6",
+    "storage_bucket": "weddingtimeline-d67a6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:272762346028:android:a601b42797f5ddb765cf89",
+        "android_client_info": {
+          "package_name": "com.ttaguchi.weddingtimeline"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBx0zkjhqX_N8zIYRIb_NWqkJ8QthfzmDw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
