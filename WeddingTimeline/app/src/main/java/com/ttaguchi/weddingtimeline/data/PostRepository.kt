@@ -68,8 +68,28 @@ class PostRepository(
             "タグは挙式/披露宴のみ選択可能です"
         }
 
-        // Convert Media to MediaDto for Firestore
-        val mediaPayload = media.map { it.toDto() }
+        // Convert Media to payload (matching Swift's structure)
+        val mediaPayload = media.map { mediaItem ->
+            val item = mutableMapOf<String, Any?>(
+                "id" to mediaItem.id,
+                "type" to mediaItem.type.rawValue,
+                "mediaUrl" to mediaItem.url,  // Use "mediaUrl" to match Swift
+                "width" to mediaItem.width,
+                "height" to mediaItem.height,
+            )
+            if (mediaItem.duration != null) {
+                item["duration"] = mediaItem.duration
+            }
+            if (mediaItem.storagePath != null) {
+                item["storagePath"] = mediaItem.storagePath
+            }
+            item.filterValues { it != null }
+        }
+
+        println("[PostRepository] Creating post with ${mediaPayload.size} media items")
+        mediaPayload.forEachIndexed { index, item ->
+            println("[PostRepository]   Media[$index]: $item")
+        }
 
         // Note: roomId is NOT stored in the document, only in the path (Swift compatible)
         val payload = mapOf(
@@ -301,10 +321,21 @@ class PostRepository(
 class PostMapper {
     fun toDomain(doc: DocumentSnapshot, roomId: String, isLiked: Boolean = false): TimeLinePost? {
         return try {
+            // 生データを確認
+            val data = doc.data
+            println("[PostMapper] Raw document data for ${doc.id}:")
+            println("[PostMapper]   media field: ${data?.get("media")}")
+            println("[PostMapper]   media type: ${data?.get("media")?.javaClass?.name}")
+            
             val dto = doc.toObject(TimeLinePostDto::class.java)
             if (dto == null) {
                 println("[PostMapper] Failed to convert document to DTO: id=${doc.id}")
                 return null
+            }
+            
+            println("[PostMapper] DTO media list size: ${dto.media.size}")
+            dto.media.forEachIndexed { index, mediaDto ->
+                println("[PostMapper]   Media[$index]: id=${mediaDto.id}, url=${mediaDto.url}, type=${mediaDto.type}")
             }
             
             // Set the document ID if not already set by Firestore
@@ -315,6 +346,8 @@ class PostMapper {
             val result = dto.toDomain(roomId, isLiked)
             if (result == null) {
                 println("[PostMapper] Failed to map DTO to domain: id=${doc.id}")
+            } else {
+                println("[PostMapper] Domain model media list size: ${result.media.size}")
             }
             result
         } catch (e: Exception) {

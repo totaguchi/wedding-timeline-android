@@ -7,10 +7,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,6 +24,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,8 +35,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
+import coil.request.ImageRequest
+import com.ttaguchi.weddingtimeline.model.Media
 import com.ttaguchi.weddingtimeline.model.MediaType
 import com.ttaguchi.weddingtimeline.model.PostTag
 import com.ttaguchi.weddingtimeline.model.TimeLinePost
@@ -45,6 +58,7 @@ fun TimelinePostCard(
     modifier: Modifier = Modifier,
     onCommentClick: (() -> Unit)? = null,
     onPostClick: (() -> Unit)? = null,
+    onImageClick: ((Int) -> Unit)? = null,
     isVisible: Boolean = true,
 ) {
     Card(
@@ -124,9 +138,10 @@ fun TimelinePostCard(
 
             // Media
             if (post.hasMedia) {
-                PostMediaGrid(
+                PostMediaView(
                     media = post.media,
-                    isVisible = isVisible
+                    isVisible = isVisible,
+                    onImageClick = onImageClick,
                 )
             }
 
@@ -212,56 +227,143 @@ private fun TagChip(tag: PostTag) {
     }
 }
 
+/**
+ * Display media (images or video) based on Swift's MediaView pattern.
+ */
 @Composable
-private fun PostMediaGrid(
-    media: List<com.ttaguchi.weddingtimeline.model.Media>,
+private fun PostMediaView(
+    media: List<Media>,
     isVisible: Boolean,
+    onImageClick: ((Int) -> Unit)?,
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        media.forEach { item ->
-            when (item.type) {
-                MediaType.IMAGE -> {
-                    MediaImageItem(url = item.url)
-                }
-                MediaType.VIDEO -> {
-                    if (isVisible) {
-                        AutoPlayVideoPlayer(
-                            url = item.url,
-                            isVisible = isVisible,
-                        )
-                    } else {
-                        MediaVideoItem(
-                            url = item.url,
-                            duration = item.duration,
-                            autoPlay = false,
-                        )
-                    }
+    val images = media.filter { it.type == MediaType.IMAGE }
+    val video = media.firstOrNull { it.type == MediaType.VIDEO }
+
+    when {
+        // Video takes priority (Swift pattern)
+        video != null -> {
+            if (isVisible) {
+                AutoPlayVideoPlayer(
+                    url = video.url,
+                    isVisible = isVisible,
+                )
+            } else {
+                MediaVideoItem(
+                    url = video.url,
+                    duration = video.duration,
+                    autoPlay = false,
+                )
+            }
+        }
+        // Images
+        images.isNotEmpty() -> {
+            PostImagesView(
+                images = images,
+                onImageClick = onImageClick,
+            )
+        }
+    }
+}
+
+/**
+ * Display images in grid or single layout (matches Swift's PostImagesView).
+ */
+@Composable
+private fun PostImagesView(
+    images: List<Media>,
+    onImageClick: ((Int) -> Unit)?,
+) {
+    when {
+        // Single image - full width with 180dp height
+        images.size == 1 -> {
+            val image = images[0]
+            PostImageItem(
+                url = image.url,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onImageClick?.invoke(0) },
+                contentScale = ContentScale.Crop,
+            )
+        }
+        // Multiple images - 2 column grid with 100dp height items
+        else -> {
+            val rows = (images.size + 1) / 2  // Calculate number of rows
+            val gridHeight = rows * 104  // 100dp item + 4dp spacing
+            
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.height(gridHeight.dp)
+            ) {
+                items(images.size) { index ->
+                    PostImageItem(
+                        url = images[index].url,
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onImageClick?.invoke(index) },
+                        contentScale = ContentScale.Crop,
+                    )
                 }
             }
         }
     }
 }
 
+/**
+ * Single image item with loading state (matches Swift's LazyImage with ShimmerPlaceholder).
+ */
 @Composable
-private fun MediaImageItem(url: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.LightGray),
-        contentAlignment = Alignment.Center
+private fun PostImageItem(
+    url: String,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
+    SubcomposeAsyncImage(
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(url)
+            .crossfade(true)
+            .build(),
+        contentDescription = "投稿画像",
+        modifier = modifier,
+        contentScale = contentScale,
     ) {
-        // TODO: Replace with AsyncImage from Coil
-        // AsyncImage(
-        //     model = url,
-        //     contentDescription = "投稿画像",
-        //     modifier = Modifier.fillMaxSize(),
-        //     contentScale = ContentScale.Crop
-        // )
-        Text("画像", color = Color.Gray)
+        when (val state = painter.state) {
+            is AsyncImagePainter.State.Loading -> {
+                // Shimmer placeholder effect
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFFE0E0E0)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.Gray,
+                    )
+                }
+            }
+            is AsyncImagePainter.State.Error -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFFF5F5F5)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "📷",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.Gray,
+                    )
+                }
+            }
+            else -> {
+                SubcomposeAsyncImageContent()
+            }
+        }
     }
 }
 

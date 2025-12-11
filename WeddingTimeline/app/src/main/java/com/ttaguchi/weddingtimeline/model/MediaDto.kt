@@ -4,36 +4,65 @@ import com.google.firebase.firestore.PropertyName
 
 /**
  * Firestore DTO for Media.
+ * Matches Swift's MediaDTO structure.
  */
 data class MediaDto(
     @PropertyName("id")
-    val id: String = "",
+    @get:PropertyName("id")
+    @set:PropertyName("id")
+    var id: String = "",
 
-    @PropertyName("url")
-    val url: String = "",
+    @PropertyName("mediaUrl")
+    @get:PropertyName("mediaUrl")
+    @set:PropertyName("mediaUrl")
+    var url: String = "",
 
     @PropertyName("type")
-    val type: String = "image",
+    @get:PropertyName("type")
+    @set:PropertyName("type")
+    var type: String = "image",
 
     @PropertyName("width")
-    val width: Int? = null,
+    @get:PropertyName("width")
+    @set:PropertyName("width")
+    var width: Int? = null,
 
     @PropertyName("height")
-    val height: Int? = null,
+    @get:PropertyName("height")
+    @set:PropertyName("height")
+    var height: Int? = null,
 
     @PropertyName("duration")
-    val duration: Double? = null,
+    @get:PropertyName("duration")
+    @set:PropertyName("duration")
+    var duration: Double? = null,
 
     @PropertyName("storagePath")
-    val storagePath: String? = null,
+    @get:PropertyName("storagePath")
+    @set:PropertyName("storagePath")
+    var storagePath: String? = null,
 ) {
+    // No-argument constructor for Firestore
+    constructor() : this("", "", "image", null, null, null, null)
+
     /**
      * Convert DTO to domain model.
      */
     fun toDomain(): Media? {
-        if (id.isEmpty() || url.isEmpty()) return null
+        println("[MediaDto] toDomain called: id=$id, url=$url, type=$type")
+        
+        if (id.isEmpty()) {
+            println("[MediaDto] Invalid media: id is empty")
+            return null
+        }
+        
+        if (url.isEmpty()) {
+            println("[MediaDto] Invalid media: url is empty")
+            return null
+        }
 
         val mediaType = MediaType.fromRawValue(type)
+        println("[MediaDto] Converting to domain: id=$id, type=$type -> $mediaType, url length=${url.length}")
 
         return Media(
             id = id,

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +25,8 @@ import coil.request.ImageRequest
 
 /**
  * Display image using Coil library with loading state.
+ * Note: This is now integrated into TimelinePostCard.kt
+ * Consider deprecating this file.
  */
 @Composable
 fun MediaImageItem(
@@ -43,29 +46,31 @@ fun MediaImageItem(
             .clip(RoundedCornerShape(12.dp)),
         contentScale = ContentScale.Crop,
     ) {
-        val state = painter.state
-        when (state) {
+        when (val state = painter.state) {
             is AsyncImagePainter.State.Loading -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.LightGray),
+                        .background(Color(0xFFE0E0E0)),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.Gray,
+                    )
                 }
             }
             is AsyncImagePainter.State.Error -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.LightGray),
+                        .background(Color(0xFFF5F5F5)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "画像の読み込みに失敗しました",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        text = "📷",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.Gray,
                     )
                 }
             }
