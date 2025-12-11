@@ -22,9 +22,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,7 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -49,7 +48,7 @@ import com.ttaguchi.weddingtimeline.model.PostTag
 import com.ttaguchi.weddingtimeline.model.TimeLinePost
 
 /**
- * Card displaying a single timeline post.
+ * X (Twitter) style post item.
  */
 @Composable
 fun TimelinePostCard(
@@ -61,142 +60,152 @@ fun TimelinePostCard(
     onImageClick: ((Int) -> Unit)? = null,
     isVisible: Boolean = true,
 ) {
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .shadow(
-                elevation = 4.dp,
-                shape = RoundedCornerShape(16.dp),
-                ambientColor = Color.Black.copy(alpha = 0.05f)
+            .background(Color.White)
+            .clickable(
+                enabled = onPostClick != null,
+                onClick = { onPostClick?.invoke() }
             )
-            .then(
-                if (onPostClick != null) {
-                    Modifier.clickable(onClick = onPostClick)
-                } else {
-                    Modifier
-                }
-            ),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header: User info + Tag
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            // User icon (left side, fixed width)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFE8D4F8)),
+                contentAlignment = Alignment.Center
             ) {
-                // User info
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // User icon
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFE8D4F8)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = post.userIcon.ifEmpty { "👤" },
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
+                Text(
+                    text = post.userIcon.ifEmpty { "👤" },
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
 
-                    // User name
-                    Column {
+            // Content area (right side, flexible width)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Header: Name + Time + Tag
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = post.authorName,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = post.formattedCreatedAt(),
+                            text = "· ${post.formattedCreatedAt()}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Color.Gray,
                         )
                     }
+
+                    // Tag chip (smaller, inline)
+                    TagChip(tag = post.tag)
                 }
 
-                // Tag chip
-                TagChip(tag = post.tag)
-            }
-
-            // Content
-            if (post.content.isNotEmpty()) {
-                Text(
-                    text = post.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-
-            // Media
-            if (post.hasMedia) {
-                PostMediaView(
-                    media = post.media,
-                    isVisible = isVisible,
-                    onImageClick = onImageClick,
-                )
-            }
-
-            // Actions: Like, Comment
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                // Like button
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(
-                        onClick = onLikeClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (post.isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "いいね",
-                            tint = if (post.isLiked) Color(0xFFE91E63) else Color.Gray,
-                        )
-                    }
+                // Content text
+                if (post.content.isNotEmpty()) {
                     Text(
-                        text = post.likeCount.toString(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (post.isLiked) Color(0xFFE91E63) else Color.Gray,
+                        text = post.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Black,
                     )
                 }
 
-                // Comment button
-                if (onCommentClick != null) {
+                // Media
+                if (post.hasMedia) {
+                    PostMediaView(
+                        media = post.media,
+                        isVisible = isVisible,
+                        onImageClick = onImageClick,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                // Actions: Like, Comment (X style)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp),
+                ) {
+                    // Comment button
+                    if (onCommentClick != null) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(
+                                onClick = onCommentClick,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ChatBubbleOutline,
+                                    contentDescription = "コメント",
+                                    tint = Color(0xFF536471),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            if (post.replyCount > 0) {
+                                Text(
+                                    text = post.replyCount.toString(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF536471),
+                                )
+                            }
+                        }
+                    }
+
+                    // Like button
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton(
-                            onClick = onCommentClick,
-                            modifier = Modifier.size(32.dp)
+                            onClick = onLikeClick,
+                            modifier = Modifier.size(36.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ChatBubbleOutline,
-                                contentDescription = "コメント",
-                                tint = Color.Gray,
+                                imageVector = if (post.isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = "いいね",
+                                tint = if (post.isLiked) Color(0xFFF91880) else Color(0xFF536471),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                        Text(
-                            text = post.replyCount.toString(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
-                        )
+                        if (post.likeCount > 0) {
+                            Text(
+                                text = post.likeCount.toString(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (post.isLiked) Color(0xFFF91880) else Color(0xFF536471),
+                            )
+                        }
                     }
                 }
             }
         }
+
+        // Divider (X style)
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = Color(0xFFEFF3F4)
+        )
     }
 }
 
@@ -209,19 +218,14 @@ private fun TagChip(tag: PostTag) {
 
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(4.dp))
             .background(backgroundColor)
-            .border(
-                width = 1.dp,
-                color = textColor.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(
             text = tag.displayName,
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             color = textColor,
         )
     }
@@ -235,32 +239,35 @@ private fun PostMediaView(
     media: List<Media>,
     isVisible: Boolean,
     onImageClick: ((Int) -> Unit)?,
+    modifier: Modifier = Modifier,
 ) {
     val images = media.filter { it.type == MediaType.IMAGE }
     val video = media.firstOrNull { it.type == MediaType.VIDEO }
 
-    when {
-        // Video takes priority (Swift pattern)
-        video != null -> {
-            if (isVisible) {
-                AutoPlayVideoPlayer(
-                    url = video.url,
-                    isVisible = isVisible,
-                )
-            } else {
-                MediaVideoItem(
-                    url = video.url,
-                    duration = video.duration,
-                    autoPlay = false,
+    Column(modifier = modifier) {
+        when {
+            // Video takes priority (Swift pattern)
+            video != null -> {
+                if (isVisible) {
+                    AutoPlayVideoPlayer(
+                        url = video.url,
+                        isVisible = isVisible,
+                    )
+                } else {
+                    MediaVideoItem(
+                        url = video.url,
+                        duration = video.duration,
+                        autoPlay = false,
+                    )
+                }
+            }
+            // Images
+            images.isNotEmpty() -> {
+                PostImagesView(
+                    images = images,
+                    onImageClick = onImageClick,
                 )
             }
-        }
-        // Images
-        images.isNotEmpty() -> {
-            PostImagesView(
-                images = images,
-                onImageClick = onImageClick,
-            )
         }
     }
 }
@@ -274,39 +281,117 @@ private fun PostImagesView(
     onImageClick: ((Int) -> Unit)?,
 ) {
     when {
-        // Single image - full width with 180dp height
+        // Single image - full width with 16:9 aspect ratio
         images.size == 1 -> {
             val image = images[0]
             PostImageItem(
                 url = image.url,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(12.dp))
                     .clickable { onImageClick?.invoke(0) },
                 contentScale = ContentScale.Crop,
             )
         }
-        // Multiple images - 2 column grid with 100dp height items
-        else -> {
-            val rows = (images.size + 1) / 2  // Calculate number of rows
-            val gridHeight = rows * 104  // 100dp item + 4dp spacing
-            
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.height(gridHeight.dp)
+        // 2 images - side by side
+        images.size == 2 -> {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                items(images.size) { index ->
+                images.forEachIndexed { index, image ->
                     PostImageItem(
-                        url = images[index].url,
+                        url = image.url,
                         modifier = Modifier
+                            .weight(1f)
                             .aspectRatio(1f)
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable { onImageClick?.invoke(index) },
                         contentScale = ContentScale.Crop,
                     )
+                }
+            }
+        }
+        // 3 images - 1 on left, 2 stacked on right
+        images.size == 3 -> {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+            ) {
+                PostImageItem(
+                    url = images[0].url,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onImageClick?.invoke(0) },
+                    contentScale = ContentScale.Crop,
+                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    PostImageItem(
+                        url = images[1].url,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onImageClick?.invoke(1) },
+                        contentScale = ContentScale.Crop,
+                    )
+                    PostImageItem(
+                        url = images[2].url,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onImageClick?.invoke(2) },
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+            }
+        }
+        // 4+ images - 2x2 grid
+        else -> {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+            ) {
+                items(minOf(images.size, 4)) { index ->
+                    Box {
+                        PostImageItem(
+                            url = images[index].url,
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onImageClick?.invoke(index) },
+                            contentScale = ContentScale.Crop,
+                        )
+                        // Show "+N" overlay for 4th image if more than 4 images
+                        if (index == 3 && images.size > 4) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(Color.Black.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "+${images.size - 4}",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -331,18 +416,18 @@ private fun PostImageItem(
         modifier = modifier,
         contentScale = contentScale,
     ) {
-        when (val state = painter.state) {
+        when (painter.state) {
             is AsyncImagePainter.State.Loading -> {
-                // Shimmer placeholder effect
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0xFFE0E0E0)),
+                        .background(Color(0xFFEFF3F4)),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = Color.Gray,
+                        modifier = Modifier.size(20.dp),
+                        color = Color(0xFF536471),
+                        strokeWidth = 2.dp
                     )
                 }
             }
@@ -350,13 +435,13 @@ private fun PostImageItem(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0xFFF5F5F5)),
+                        .background(Color(0xFFEFF3F4)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "📷",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.Gray,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color(0xFF536471),
                     )
                 }
             }
@@ -372,22 +457,21 @@ private fun MediaVideoItem(url: String, duration: Double?, autoPlay: Boolean = t
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp)
+            .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.DarkGray),
+            .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
-        // TODO: Implement video player
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text("動画", color = Color.White)
+            Text("▶ 動画", color = Color.White, style = MaterialTheme.typography.bodyLarge)
             duration?.let {
                 Text(
                     text = formatDuration(it),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White
+                    color = Color.White.copy(alpha = 0.7f)
                 )
             }
         }
