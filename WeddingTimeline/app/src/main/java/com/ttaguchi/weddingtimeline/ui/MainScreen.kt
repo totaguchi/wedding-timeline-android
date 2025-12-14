@@ -61,7 +61,7 @@ fun MainScreen(
     ) { paddingValues ->
         when (selectedTab) {
             0 -> TimelineScreen(
-                roomId = roomId, // Now non-null
+                roomId = roomId,
                 onCreatePost = onCreatePost,
                 modifier = Modifier.padding(paddingValues)
             )

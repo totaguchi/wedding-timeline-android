@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,9 +53,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun LoginScreen(
-    onLoginSuccess: (String) -> Unit,
+    onLoginSuccess: (roomId: String) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: LoginViewModel = viewModel(),
+    viewModel: LoginViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showIconPicker by remember { mutableStateOf(false) }
@@ -265,6 +266,13 @@ fun LoginScreen(
             },
             onDismiss = { showIconPicker = false }
         )
+    }
+
+    // ログイン成功時の処理
+    LaunchedEffect(uiState.loginSuccess) {
+        if (uiState.loginSuccess && uiState.joinedRoomId != null) {
+            onLoginSuccess(uiState.joinedRoomId!!)
+        }
     }
 }
 

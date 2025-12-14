@@ -43,6 +43,7 @@ fun MediaVideoItem(
     modifier: Modifier = Modifier,
     height: Int = 200,
     autoPlay: Boolean = false,
+    onClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
@@ -76,6 +77,9 @@ fun MediaVideoItem(
             .height(height.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color.Black)
+            .let { base ->
+                if (onClick != null) base.clickable { onClick() } else base
+            }
     ) {
         AndroidView(
             factory = { ctx ->
@@ -119,7 +123,7 @@ fun MediaVideoItem(
         }
 
         // Duration badge
-        if (duration != null && !isPlaying) {
+        if (duration != null) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -140,7 +144,7 @@ fun MediaVideoItem(
     }
 }
 
-private fun formatDuration(seconds: Double): String {
+internal fun formatDuration(seconds: Double): String {
     val minutes = (seconds / 60).toInt()
     val secs = (seconds % 60).toInt()
     return "%d:%02d".format(minutes, secs)

@@ -42,7 +42,9 @@ fun MediaImageItem(
         contentDescription = "投稿画像",
         modifier = modifier
             .fillMaxWidth()
-            .height(height.dp)
+            .then(
+                if (height > 0) Modifier.height(height.dp) else Modifier
+            )
             .clip(RoundedCornerShape(12.dp)),
         contentScale = ContentScale.Crop,
     ) {

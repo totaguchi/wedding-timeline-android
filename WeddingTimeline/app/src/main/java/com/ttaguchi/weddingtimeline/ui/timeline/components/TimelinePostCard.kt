@@ -21,9 +21,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,7 +59,10 @@ fun TimelinePostCard(
     onCommentClick: (() -> Unit)? = null,
     onPostClick: (() -> Unit)? = null,
     onImageClick: ((Int) -> Unit)? = null,
+    onVideoClick: ((String) -> Unit)? = null,
     isVisible: Boolean = true,
+    isMuted: Boolean = true,
+    onMuteToggle: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -75,7 +79,7 @@ fun TimelinePostCard(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // User icon (left side, fixed width)
+            // User icon
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -89,12 +93,12 @@ fun TimelinePostCard(
                 )
             }
 
-            // Content area (right side, flexible width)
+            // Content area
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Header: Name + Time + Tag
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -116,7 +120,6 @@ fun TimelinePostCard(
                         )
                     }
 
-                    // Tag chip (smaller, inline)
                     TagChip(tag = post.tag)
                 }
 
@@ -134,12 +137,15 @@ fun TimelinePostCard(
                     PostMediaView(
                         media = post.media,
                         isVisible = isVisible,
+                        isMuted = isMuted,
                         onImageClick = onImageClick,
+                        onVideoClick = onVideoClick,
+                        onMuteToggle = onMuteToggle,
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
 
-                // Actions: Like, Comment (X style)
+                // Actions
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -201,7 +207,6 @@ fun TimelinePostCard(
             }
         }
 
-        // Divider (X style)
         HorizontalDivider(
             thickness = 0.5.dp,
             color = Color(0xFFEFF3F4)
@@ -232,13 +237,16 @@ private fun TagChip(tag: PostTag) {
 }
 
 /**
- * Display media (images or video) based on Swift's MediaView pattern.
+ * Display media (images or video).
  */
 @Composable
 private fun PostMediaView(
     media: List<Media>,
     isVisible: Boolean,
+    isMuted: Boolean,
     onImageClick: ((Int) -> Unit)?,
+    onVideoClick: ((String) -> Unit)?,
+    onMuteToggle: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val images = media.filter { it.type == MediaType.IMAGE }
@@ -246,19 +254,64 @@ private fun PostMediaView(
 
     Column(modifier = modifier) {
         when {
-            // Video takes priority (Swift pattern)
+            // Video takes priority
             video != null -> {
-                if (isVisible) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .clip(RoundedCornerShape(12.dp))
+                ) {
+                    // Auto-play video when visible
                     AutoPlayVideoPlayer(
                         url = video.url,
                         isVisible = isVisible,
+                        isMuted = isMuted,
+                        onVideoClick = { onVideoClick?.invoke(video.url) }
                     )
-                } else {
-                    MediaVideoItem(
-                        url = video.url,
-                        duration = video.duration,
-                        autoPlay = false,
-                    )
+
+                    // Duration overlay (bottom-left)
+                    video.duration?.let { duration ->
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(8.dp)
+                                .background(
+                                    Color.Black.copy(alpha = 0.6f),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = formatDuration(duration),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Mute button (bottom-right)
+                    if (onMuteToggle != null) {
+                        IconButton(
+                            onClick = onMuteToggle,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(4.dp)
+                                .size(32.dp)
+                                .background(
+                                    Color.Black.copy(alpha = 0.6f),
+                                    CircleShape
+                                )
+                        ) {
+                            Icon(
+                                imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                contentDescription = if (isMuted) "ミュート解除" else "ミュート",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
             // Images
@@ -273,7 +326,7 @@ private fun PostMediaView(
 }
 
 /**
- * Display images in grid or single layout (matches Swift's PostImagesView).
+ * Display images in grid or single layout.
  */
 @Composable
 private fun PostImagesView(
@@ -399,7 +452,7 @@ private fun PostImagesView(
 }
 
 /**
- * Single image item with loading state (matches Swift's LazyImage with ShimmerPlaceholder).
+ * Single image item with loading state.
  */
 @Composable
 private fun PostImageItem(
@@ -450,36 +503,4 @@ private fun PostImageItem(
             }
         }
     }
-}
-
-@Composable
-private fun MediaVideoItem(url: String, duration: Double?, autoPlay: Boolean = true) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(16f / 9f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.Black),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text("▶ 動画", color = Color.White, style = MaterialTheme.typography.bodyLarge)
-            duration?.let {
-                Text(
-                    text = formatDuration(it),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            }
-        }
-    }
-}
-
-private fun formatDuration(seconds: Double): String {
-    val minutes = (seconds / 60).toInt()
-    val secs = (seconds % 60).toInt()
-    return "%d:%02d".format(minutes, secs)
 }

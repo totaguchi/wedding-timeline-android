@@ -1,5 +1,7 @@
 package com.ttaguchi.weddingtimeline.data
 
+import android.content.Context
+import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
@@ -7,6 +9,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QueryDocumentSnapshot
+import com.google.firebase.storage.FirebaseStorage
 import com.ttaguchi.weddingtimeline.model.Media
 import com.ttaguchi.weddingtimeline.model.MediaDto
 import com.ttaguchi.weddingtimeline.model.PostTag
@@ -312,6 +315,20 @@ class PostRepository(
     fun generatePostId(roomId: String): String {
         val roomIdSan = roomId.trim()
         return postsCollection(roomIdSan).document().id
+    }
+
+    /**
+     * Upload media file to Firebase Storage.
+     * Returns the download URL.
+     */
+    suspend fun uploadMedia(uri: Uri, storagePath: String, context: Context): String {
+        val storageRef = FirebaseStorage.getInstance().reference.child(storagePath)
+        
+        val uploadTask = storageRef.putFile(uri).await()
+        val downloadUrl = uploadTask.storage.downloadUrl.await()
+        
+        println("[PostRepository] Uploaded media to: $downloadUrl")
+        return downloadUrl.toString()
     }
 }
 
