@@ -10,10 +10,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.ttaguchi.weddingtimeline.data.PostRepository
-import com.ttaguchi.weddingtimeline.model.Media
-import com.ttaguchi.weddingtimeline.model.MediaType
-import com.ttaguchi.weddingtimeline.model.PostTag
-import com.ttaguchi.weddingtimeline.model.Session
+import com.ttaguchi.weddingtimeline.domain.model.Media
+import com.ttaguchi.weddingtimeline.domain.model.MediaType
+import com.ttaguchi.weddingtimeline.domain.model.PostTag
+import com.ttaguchi.weddingtimeline.domain.model.Session
 import kotlinx.coroutines.launch
 import java.util.UUID
 

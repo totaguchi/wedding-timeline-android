@@ -5,9 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.ttaguchi.weddingtimeline.data.PostRepository
-import com.ttaguchi.weddingtimeline.model.PostTag
-import com.ttaguchi.weddingtimeline.model.TimeLinePost
-import com.ttaguchi.weddingtimeline.model.TimelineFilter
+import com.ttaguchi.weddingtimeline.domain.model.PostTag
+import com.ttaguchi.weddingtimeline.domain.model.TimeLinePost
+import com.ttaguchi.weddingtimeline.domain.model.TimelineFilter
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

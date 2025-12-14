@@ -16,21 +16,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.ttaguchi.weddingtimeline.model.Session
+import com.ttaguchi.weddingtimeline.domain.model.Session
 import com.ttaguchi.weddingtimeline.ui.timeline.TimelineScreen
 
 @Composable
 fun MainScreen(
     session: Session,
     modifier: Modifier = Modifier,
-    onCreatePost: () -> Unit = {},
+    onCreatePost: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var hideBottomBar by remember { mutableStateOf(false) } // 型を明示的に指定
 
     // roomIdがnullの場合はローディング表示
     val roomId = session.roomId
@@ -47,14 +49,16 @@ fun MainScreen(
     Scaffold(
         modifier = modifier,
         bottomBar = {
-            NavigationBar {
-                TabItem.entries.forEachIndexed { index, item ->
-                    NavigationBarItem(
-                        icon = { Icon(item.icon, contentDescription = item.title) },
-                        label = { Text(item.title) },
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index }
-                    )
+            if (!hideBottomBar) {
+                NavigationBar {
+                    TabItem.entries.forEachIndexed { index, item ->
+                        NavigationBarItem(
+                            icon = { Icon(item.icon, contentDescription = item.title) },
+                            label = { Text(item.title) },
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index }
+                        )
+                    }
                 }
             }
         }
@@ -63,7 +67,9 @@ fun MainScreen(
             0 -> TimelineScreen(
                 roomId = roomId,
                 onCreatePost = onCreatePost,
-                modifier = Modifier.padding(paddingValues)
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = paddingValues,
+                onToggleBottomBar = { hide: Boolean -> hideBottomBar = hide } // ラムダの型を明示
             )
             1 -> BestPostScreen(modifier = Modifier.padding(paddingValues))
             2 -> SettingsScreen(modifier = Modifier.padding(paddingValues))

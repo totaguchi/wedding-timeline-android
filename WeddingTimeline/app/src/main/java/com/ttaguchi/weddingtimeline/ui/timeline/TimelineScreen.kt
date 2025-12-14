@@ -38,11 +38,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ttaguchi.weddingtimeline.model.MediaType
+import com.ttaguchi.weddingtimeline.domain.model.MediaType
 import com.ttaguchi.weddingtimeline.ui.timeline.components.CategoryFilterBar
 import com.ttaguchi.weddingtimeline.ui.timeline.components.MediaImageItem
 import com.ttaguchi.weddingtimeline.ui.timeline.components.NewPostsBadge
@@ -56,6 +57,8 @@ fun TimelineScreen(
     roomId: String,
     onCreatePost: () -> Unit,
     modifier: Modifier = Modifier,
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(),
+    onToggleBottomBar: (Boolean) -> Unit = {},
     viewModel: TimelineViewModel = viewModel(),
 ) {
     println("[TimelineScreen] Rendering with roomId=$roomId")
@@ -70,6 +73,7 @@ fun TimelineScreen(
     var videoUrl by remember { mutableStateOf<String?>(null) }
     var showVideo by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(true) }
+    val hideBottomBar = showVideo
 
     val filteredPosts = remember(uiState.posts, uiState.selectedFilter) {
         viewModel.getFilteredPosts()
@@ -108,6 +112,10 @@ fun TimelineScreen(
         viewModel.startListening(roomId)
     }
 
+    LaunchedEffect(hideBottomBar) {
+        onToggleBottomBar(hideBottomBar)
+    }
+
     // Show error in Snackbar
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -128,7 +136,11 @@ fun TimelineScreen(
             }
     }
 
-    // Show video player fullscreen
+    LaunchedEffect(hideBottomBar) {
+        onToggleBottomBar(hideBottomBar)
+    }
+
+    // Show video player fullscreen (without Scaffold to hide bottom bar)
     if (showVideo && videoUrl != null) {
         VideoPlayerScreen(
             videoUrl = videoUrl!!,
@@ -138,38 +150,38 @@ fun TimelineScreen(
             }
         )
     } else if (showGallery) {
-        // Show image gallery fullscreen
+        // Show image gallery fullscreen (without Scaffold)
         ImageGalleryOverlay(
             images = galleryImages,
             startIndex = galleryStartIndex,
             onDismiss = { showGallery = false }
         )
     } else {
-        // Main timeline UI
-        Scaffold(
-            modifier = modifier,
-            topBar = {
-                TopAppBar(
-                    title = { Text("タイムライン") }
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            floatingActionButton = {
-                FloatingActionButton(onClick = onCreatePost) {
-                    Icon(Icons.Default.Add, contentDescription = "投稿作成")
-                }
+        // Main timeline UI with Scaffold (shows bottom bar in parent)
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            TopAppBar(
+                title = { Text("タイムライン") }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onCreatePost) {
+                Icon(Icons.Default.Add, contentDescription = "投稿作成")
             }
-        ) { paddingValues ->
-            PullToRefreshBox(
-                isRefreshing = uiState.isRefreshing,
-                onRefresh = {
-                    println("[TimelineScreen] Pull to refresh triggered")
-                    viewModel.refreshHead(roomId)
-                },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
+        }
+    ) {
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { 
+                println("[TimelineScreen] Pull to refresh triggered")
+                viewModel.refreshHead(roomId) 
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+        ) {
                 Column {
                     // Filter bar
                     CategoryFilterBar(

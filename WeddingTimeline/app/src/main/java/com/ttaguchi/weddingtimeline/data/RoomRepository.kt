@@ -8,8 +8,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Source
-import com.ttaguchi.weddingtimeline.model.RoomMember
-import com.ttaguchi.weddingtimeline.model.RoomMemberDto
+import com.ttaguchi.weddingtimeline.domain.model.RoomMember
+import com.ttaguchi.weddingtimeline.domain.model.RoomMemberDto
 import com.ttaguchi.weddingtimeline.request.JoinError
 import com.ttaguchi.weddingtimeline.request.JoinParams
 import kotlinx.coroutines.channels.awaitClose

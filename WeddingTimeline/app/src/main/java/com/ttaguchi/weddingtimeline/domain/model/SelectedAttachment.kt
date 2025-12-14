@@ -1,4 +1,4 @@
-package com.ttaguchi.weddingtimeline.model
+package com.ttaguchi.weddingtimeline.domain.model
 
 import android.net.Uri
 import java.util.UUID

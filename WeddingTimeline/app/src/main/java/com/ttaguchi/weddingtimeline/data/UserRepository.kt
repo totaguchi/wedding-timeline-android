@@ -6,8 +6,8 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
-import com.ttaguchi.weddingtimeline.model.AppUser
-import com.ttaguchi.weddingtimeline.model.AppUserDto
+import com.ttaguchi.weddingtimeline.domain.model.AppUser
+import com.ttaguchi.weddingtimeline.domain.model.AppUserDto
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow

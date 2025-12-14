@@ -1,4 +1,4 @@
-package com.ttaguchi.weddingtimeline.model
+package com.ttaguchi.weddingtimeline.domain.model
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId

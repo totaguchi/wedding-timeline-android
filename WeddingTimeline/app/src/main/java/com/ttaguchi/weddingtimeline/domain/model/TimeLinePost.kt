@@ -1,4 +1,4 @@
-package com.ttaguchi.weddingtimeline.model
+package com.ttaguchi.weddingtimeline.domain.model
 
 import java.text.SimpleDateFormat
 import java.util.Date

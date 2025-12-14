@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.ttaguchi.weddingtimeline.data.RoomRepository
 import com.ttaguchi.weddingtimeline.data.UserRepository
-import com.ttaguchi.weddingtimeline.model.Session
+import com.ttaguchi.weddingtimeline.domain.model.Session
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

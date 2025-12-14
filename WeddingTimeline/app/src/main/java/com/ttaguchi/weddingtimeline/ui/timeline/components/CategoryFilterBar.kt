@@ -19,7 +19,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.ttaguchi.weddingtimeline.model.TimelineFilter
+import com.ttaguchi.weddingtimeline.domain.model.TimelineFilter
 
 /**
  * Filter bar with category chips (All, Ceremony, Reception).

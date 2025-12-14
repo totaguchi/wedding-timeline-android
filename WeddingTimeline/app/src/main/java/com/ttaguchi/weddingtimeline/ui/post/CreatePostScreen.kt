@@ -68,8 +68,8 @@ import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
-import com.ttaguchi.weddingtimeline.model.PostTag
-import com.ttaguchi.weddingtimeline.model.Session
+import com.ttaguchi.weddingtimeline.domain.model.PostTag
+import com.ttaguchi.weddingtimeline.domain.model.Session
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)

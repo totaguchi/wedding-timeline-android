@@ -3,14 +3,19 @@ package com.ttaguchi.weddingtimeline.service
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
+import android.media.MediaMuxer
 import android.net.Uri
+import androidx.core.net.toUri
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
-import com.ttaguchi.weddingtimeline.model.Media
-import com.ttaguchi.weddingtimeline.model.MediaType
-import com.ttaguchi.weddingtimeline.model.SelectedAttachment
+import com.ttaguchi.weddingtimeline.domain.model.Media
+import com.ttaguchi.weddingtimeline.domain.model.MediaType
+import com.ttaguchi.weddingtimeline.domain.model.SelectedAttachment
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -129,7 +134,19 @@ class MediaService(
         val currentUid = auth.currentUser?.uid ?: throw AppError.Unauthenticated
         if (currentUid != userId) throw AppError.Unauthorized
 
-        val file = getFileFromUri(uri)
+        val originalFile = getFileFromUri(uri)
+        val mimeType = context.contentResolver.getType(uri) ?: "video/mp4"
+
+        // 非mp4の場合はコンテナをmp4にリムックス（再エンコードなし）
+        val file = if (mimeType != "video/mp4") {
+            try {
+                remuxToMp4(originalFile)
+            } catch (e: Exception) {
+                throw AppError.TranscodeError("動画のmp4変換に失敗しました: ${e.message}")
+            }
+        } else {
+            originalFile
+        }
 
         if (file.length() >= 200 * 1024 * 1024) {
             throw AppError.FileTooLarge("動画サイズが200MBを超えています")
@@ -142,12 +159,12 @@ class MediaService(
             .setContentType("video/mp4")
             .build()
 
-        ref.putFile(uri, metadata).await()
+        ref.putFile(file.toUri(), metadata).await()
         val downloadUrl = ref.downloadUrl.await().toString()
 
         // Extract video metadata
         val retriever = MediaMetadataRetriever()
-        retriever.setDataSource(context, uri)
+        retriever.setDataSource(file.absolutePath)
 
         val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
         val duration = durationStr?.toDoubleOrNull()?.div(1000.0)
@@ -181,6 +198,59 @@ class MediaService(
         inputStream.close()
 
         return tempFile
+    }
+
+    /**
+     * Remux to MP4 container without re-encoding (compatible for MOVなど).
+     */
+    private fun remuxToMp4(inputFile: File): File {
+        val outputFile = File(context.cacheDir, "remux_${System.currentTimeMillis()}.mp4")
+        val extractor = MediaExtractor()
+        val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        try {
+            extractor.setDataSource(inputFile.absolutePath)
+            val trackCount = extractor.trackCount
+            val indexMap = HashMap<Int, Int>(trackCount)
+
+            for (i in 0 until trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                if (!mime.startsWith("video/") && !mime.startsWith("audio/")) continue
+                extractor.selectTrack(i)
+                val dstIndex = muxer.addTrack(format)
+                indexMap[i] = dstIndex
+            }
+
+            muxer.start()
+
+            val bufferSize = 1 * 1024 * 1024
+            val buffer = java.nio.ByteBuffer.allocate(bufferSize)
+            val bufferInfo = MediaCodec.BufferInfo()
+
+            while (true) {
+                bufferInfo.offset = 0
+                bufferInfo.size = extractor.readSampleData(buffer, 0)
+                if (bufferInfo.size < 0) {
+                    bufferInfo.size = 0
+                    break
+                }
+                bufferInfo.presentationTimeUs = extractor.sampleTime
+                bufferInfo.flags = extractor.sampleFlags
+                val trackIndex = extractor.sampleTrackIndex
+                val dstTrackIndex = indexMap[trackIndex] ?: -1
+                if (dstTrackIndex >= 0) {
+                    muxer.writeSampleData(dstTrackIndex, buffer, bufferInfo)
+                }
+                extractor.advance()
+            }
+        } finally {
+            try {
+                muxer.stop()
+            } catch (_: Exception) { }
+            muxer.release()
+            extractor.release()
+        }
+        return outputFile
     }
 }
 

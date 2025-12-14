@@ -43,10 +43,10 @@ import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
-import com.ttaguchi.weddingtimeline.model.Media
-import com.ttaguchi.weddingtimeline.model.MediaType
-import com.ttaguchi.weddingtimeline.model.PostTag
-import com.ttaguchi.weddingtimeline.model.TimeLinePost
+import com.ttaguchi.weddingtimeline.domain.model.Media
+import com.ttaguchi.weddingtimeline.domain.model.MediaType
+import com.ttaguchi.weddingtimeline.domain.model.PostTag
+import com.ttaguchi.weddingtimeline.domain.model.TimeLinePost
 
 /**
  * X (Twitter) style post item.
