@@ -5,15 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.ttaguchi.weddingtimeline.data.PostRepository
-import com.ttaguchi.weddingtimeline.domain.model.PostTag
 import com.ttaguchi.weddingtimeline.domain.model.TimeLinePost
 import com.ttaguchi.weddingtimeline.domain.model.TimelineFilter
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -23,27 +22,26 @@ data class TimelineUiState(
     val posts: List<TimeLinePost> = emptyList(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
+    val error: String? = null,
     val selectedFilter: TimelineFilter = TimelineFilter.ALL,
     val newBadgeCount: Int = 0,
-    val error: String? = null,
+    val isAtTop: Boolean = true,
+    val activeVideoPostId: String? = null,
 )
 
 /**
  * ViewModel for Timeline screen.
  */
 class TimelineViewModel(
-    private val postRepository: PostRepository = PostRepository(),
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
+    private val repository: PostRepository = PostRepository()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TimelineUiState())
     val uiState: StateFlow<TimelineUiState> = _uiState.asStateFlow()
 
     private var lastSnapshot: DocumentSnapshot? = null
-    private var listenerJob: Job? = null
-    private var pendingPosts: List<TimeLinePost> = emptyList()
-    private var isAtTop: Boolean = true
-    private var currentRoomId: String? = null
+    private val pendingPosts = mutableListOf<TimeLinePost>()
+    private var listenJob: Job? = null
 
     /**
      * Fetch posts with pagination.
@@ -58,70 +56,38 @@ class TimelineViewModel(
 
         viewModelScope.launch {
             try {
-                _uiState.update { it.copy(isLoading = true, error = null) }
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
                 println("[TimelineViewModel] Starting fetch...")
 
-                val startAfter = if (reset) {
-                    lastSnapshot = null
-                    null
-                } else {
-                    lastSnapshot
-                }
-
-                val result = postRepository.fetchPosts(
+                val result = repository.fetchPosts(
                     roomId = roomId,
                     limit = 50,
-                    startAfter = startAfter
+                    startAfter = if (reset) null else lastSnapshot
                 )
 
                 println("[TimelineViewModel] Fetched ${result.posts.size} posts")
 
-                _uiState.update { state ->
-                    val newPosts = if (reset) {
-                        result.posts
-                    } else {
-                        (state.posts + result.posts).distinctBy { it.id }
-                    }
-                    state.copy(
-                        posts = newPosts,
-                        isLoading = false,
-                        error = null
-                    )
+                val newList = if (reset) {
+                    result.posts
+                } else {
+                    (_uiState.value.posts + result.posts).distinctBy { it.id }
                 }
 
+                _uiState.value = _uiState.value.copy(
+                    posts = newList,
+                    isLoading = false,
+                    error = null
+                )
+
                 lastSnapshot = result.lastSnapshot
-                currentRoomId = roomId
             } catch (e: Exception) {
                 println("[TimelineViewModel] Error fetching posts: ${e.message}")
                 e.printStackTrace()
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false, 
-                        error = "投稿の取得に失敗しました: ${e.message}"
-                    ) 
-                }
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false, 
+                    error = "投稿の取得に失敗しました: ${e.message}"
+                )
             }
-        }
-    }
-
-    /**
-     * Start listening to latest posts.
-     */
-    fun startListening(roomId: String) {
-        println("[TimelineViewModel] startListening called: roomId=$roomId")
-        
-        listenerJob?.cancel()
-        listenerJob = viewModelScope.launch {
-            postRepository.listenLatestWithIsLiked(roomId, limit = 20)
-                .catch { e ->
-                    println("[TimelineViewModel] Listener error: ${e.message}")
-                    e.printStackTrace()
-                    _uiState.update { it.copy(error = "リアルタイム更新エラー: ${e.message}") }
-                }
-                .collect { result ->
-                    println("[TimelineViewModel] Received ${result.posts.size} posts from listener")
-                    handleNewPosts(result.posts)
-                }
         }
     }
 
@@ -129,131 +95,144 @@ class TimelineViewModel(
      * Refresh head (pull-to-refresh).
      */
     fun refreshHead(roomId: String) {
-        println("[TimelineViewModel] refreshHead called")
+        println("[TimelineViewModel] refreshHead called for roomId=$roomId")
         
         viewModelScope.launch {
             try {
-                _uiState.update { it.copy(isRefreshing = true, error = null) }
+                _uiState.value = _uiState.value.copy(isRefreshing = true, error = null)
                 
-                val result = postRepository.fetchPosts(roomId, limit = 50, startAfter = null)
+                val result = repository.fetchPosts(roomId = roomId, limit = 50, startAfter = null)
                 
                 println("[TimelineViewModel] Refresh completed with ${result.posts.size} posts")
                 
-                _uiState.update { state ->
-                    state.copy(
-                        posts = result.posts,
-                        isRefreshing = false,
-                        newBadgeCount = 0,
-                        error = null
-                    )
-                }
+                _uiState.value = _uiState.value.copy(
+                    posts = result.posts,
+                    isRefreshing = false,
+                    newBadgeCount = 0,
+                    error = null
+                )
                 
                 lastSnapshot = result.lastSnapshot
-                pendingPosts = emptyList()
+                pendingPosts.clear()
             } catch (e: Exception) {
                 println("[TimelineViewModel] Refresh error: ${e.message}")
                 e.printStackTrace()
-                _uiState.update { 
-                    it.copy(
-                        isRefreshing = false,
-                        error = "更新に失敗しました: ${e.message}"
-                    ) 
-                }
+                _uiState.value = _uiState.value.copy(
+                    isRefreshing = false,
+                    error = "更新に失敗しました: ${e.message}"
+                )
             }
         }
     }
 
-    private fun handleNewPosts(latestPosts: List<TimeLinePost>) {
-        val currentPosts = _uiState.value.posts
-        val newPosts = latestPosts.filter { new -> currentPosts.none { it.id == new.id } }
-
-        if (newPosts.isEmpty()) return
-
-        println("[TimelineViewModel] Found ${newPosts.size} new posts, isAtTop=$isAtTop")
-
-        if (isAtTop) {
-            // Merge immediately
-            _uiState.update { state ->
-                val merged = (newPosts + currentPosts).distinctBy { it.id }
-                state.copy(posts = merged)
+    /**
+     * Start listening for new posts.
+     */
+    fun startListening(roomId: String) {
+        println("[TimelineViewModel] Starting real-time listener for roomId=$roomId")
+        
+        listenJob?.cancel()
+        listenJob = viewModelScope.launch {
+            repository.listenLatestWithIsLiked(roomId).collectLatest { payload ->
+                handleNewPosts(payload.posts)
             }
+        }
+    }
+
+    private fun handleNewPosts(newPosts: List<TimeLinePost>) {
+        val existingIds = _uiState.value.posts.map { it.id }.toSet()
+        val actuallyNew = newPosts.filter { it.id !in existingIds }
+        
+        if (actuallyNew.isEmpty()) {
+            println("[TimelineViewModel] No new posts to handle")
+            return
+        }
+        
+        println("[TimelineViewModel] Handling ${actuallyNew.size} new posts, isAtTop=${_uiState.value.isAtTop}")
+        
+        if (_uiState.value.isAtTop) {
+            _uiState.value = _uiState.value.copy(
+                posts = (actuallyNew + _uiState.value.posts).distinctBy { it.id }
+            )
         } else {
-            // Store as pending
-            pendingPosts = (newPosts + pendingPosts).distinctBy { it.id }
-            _uiState.update { it.copy(newBadgeCount = pendingPosts.size) }
+            pendingPosts.addAll(actuallyNew)
+            _uiState.value = _uiState.value.copy(
+                newBadgeCount = pendingPosts.size
+            )
         }
     }
 
     fun revealPending() {
-        val pending = pendingPosts
-        if (pending.isEmpty()) return
-
-        println("[TimelineViewModel] Revealing ${pending.size} pending posts")
-
-        _uiState.update { state ->
-            val merged = (pending + state.posts).distinctBy { it.id }
-            state.copy(posts = merged, newBadgeCount = 0)
-        }
-        pendingPosts = emptyList()
+        println("[TimelineViewModel] Revealing ${pendingPosts.size} pending posts")
+        
+        if (pendingPosts.isEmpty()) return
+        
+        _uiState.value = _uiState.value.copy(
+            posts = (pendingPosts.toList() + _uiState.value.posts).distinctBy { it.id },
+            newBadgeCount = 0
+        )
+        pendingPosts.clear()
     }
 
-    fun markAtTop(atTop: Boolean) {
-        isAtTop = atTop
-        if (atTop && pendingPosts.isNotEmpty()) {
+    fun markAtTop(isAtTop: Boolean) {
+        _uiState.value = _uiState.value.copy(isAtTop = isAtTop)
+        
+        if (isAtTop && pendingPosts.isNotEmpty()) {
             revealPending()
         }
     }
 
-    fun setFilter(filter: TimelineFilter) {
-        println("[TimelineViewModel] Filter changed to: $filter")
-        _uiState.update { it.copy(selectedFilter = filter) }
-    }
-
-    fun getFilteredPosts(): List<TimeLinePost> {
-        val posts = _uiState.value.posts
-        return when (_uiState.value.selectedFilter) {
-            TimelineFilter.ALL -> posts
-            TimelineFilter.CEREMONY -> posts.filter { it.tag == PostTag.CEREMONY }
-            TimelineFilter.RECEPTION -> posts.filter { it.tag == PostTag.RECEPTION }
-        }
-    }
-
     fun toggleLike(post: TimeLinePost, roomId: String) {
-        val uid = auth.currentUser?.uid
-        if (uid == null) {
-            println("[TimelineViewModel] Cannot toggle like: user not authenticated")
-            return
-        }
-
-        println("[TimelineViewModel] Toggling like for post ${post.id}")
+        val currentUser = FirebaseAuth.getInstance().currentUser ?: return
+        val userId = currentUser.uid
 
         viewModelScope.launch {
             try {
                 val newIsLiked = !post.isLiked
-                val newLikeCount = postRepository.toggleLike(roomId, post.id, uid, newIsLiked)
+                val newCount = repository.toggleLike(roomId, post.id, userId, newIsLiked)
 
-                _uiState.update { state ->
-                    val updatedPosts = state.posts.map { p ->
-                        if (p.id == post.id) {
-                            p.copy(isLiked = newIsLiked, likeCount = newLikeCount)
-                        } else {
-                            p
-                        }
-                    }
-                    state.copy(posts = updatedPosts)
+                val updatedPosts = _uiState.value.posts.map { p ->
+                    if (p.id == post.id) {
+                        p.copy(isLiked = newIsLiked, likeCount = newCount)
+                    } else p
                 }
-                
-                println("[TimelineViewModel] Like toggled successfully: isLiked=$newIsLiked, count=$newLikeCount")
+                _uiState.value = _uiState.value.copy(posts = updatedPosts)
             } catch (e: Exception) {
-                println("[TimelineViewModel] Toggle like error: ${e.message}")
-                e.printStackTrace()
+                println("[TimelineViewModel] Error toggling like: ${e.message}")
             }
         }
     }
 
+    fun setFilter(filter: TimelineFilter) {
+        _uiState.value = _uiState.value.copy(selectedFilter = filter)
+    }
+
+    fun getFilteredPosts(): List<TimeLinePost> {
+        val filter = _uiState.value.selectedFilter
+        return if (filter == TimelineFilter.ALL) {
+            _uiState.value.posts
+        } else {
+            _uiState.value.posts.filter { post ->
+                when (filter) {
+                    TimelineFilter.CEREMONY -> post.tag == com.ttaguchi.weddingtimeline.domain.model.PostTag.CEREMONY
+                    TimelineFilter.RECEPTION -> post.tag == com.ttaguchi.weddingtimeline.domain.model.PostTag.RECEPTION
+                    TimelineFilter.ALL -> true
+                }
+            }
+        }
+    }
+
+    /**
+     * Set the currently active video post ID.
+     * Only one video should be playing at a time.
+     */
+    fun setActiveVideoPost(postId: String?) {
+        _uiState.value = _uiState.value.copy(activeVideoPostId = postId)
+    }
+
     override fun onCleared() {
         super.onCleared()
-        println("[TimelineViewModel] onCleared")
-        listenerJob?.cancel()
+        listenJob?.cancel()
+        println("[TimelineViewModel] Listener removed")
     }
 }

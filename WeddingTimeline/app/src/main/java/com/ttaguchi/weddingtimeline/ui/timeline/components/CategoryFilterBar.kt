@@ -3,12 +3,15 @@ package com.ttaguchi.weddingtimeline.ui.timeline.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,17 +36,17 @@ fun CategoryFilterBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .background(Color.White)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TimelineFilter.entries.forEach { filter ->
             FilterChip(
-                label = filter.displayName,
-                isSelected = selectedFilter == filter,
+                selected = selectedFilter == filter,
                 onClick = { onFilterSelected(filter) },
-                modifier = Modifier.weight(1f)
+                label = { Text(filter.displayName) }
             )
         }
     }

@@ -1,6 +1,5 @@
 package com.ttaguchi.weddingtimeline.ui.timeline
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,16 +8,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,14 +33,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ttaguchi.weddingtimeline.domain.model.MediaType
 import com.ttaguchi.weddingtimeline.ui.timeline.components.CategoryFilterBar
-import com.ttaguchi.weddingtimeline.ui.timeline.components.MediaImageItem
+import com.ttaguchi.weddingtimeline.ui.timeline.components.FullscreenImageGallery
 import com.ttaguchi.weddingtimeline.ui.timeline.components.NewPostsBadge
 import com.ttaguchi.weddingtimeline.ui.timeline.components.TimelinePostCard
 import com.ttaguchi.weddingtimeline.ui.timeline.components.VideoPlayerScreen
@@ -73,17 +66,10 @@ fun TimelineScreen(
     var videoUrl by remember { mutableStateOf<String?>(null) }
     var showVideo by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(true) }
-    val hideBottomBar = showVideo
+    val hideBottomBar = showVideo || showGallery
 
     val filteredPosts = remember(uiState.posts, uiState.selectedFilter) {
         viewModel.getFilteredPosts()
-    }
-
-    // Detect visible items
-    val visibleItemIndices by remember {
-        derivedStateOf {
-            listState.layoutInfo.visibleItemsInfo.map { it.index }.toSet()
-        }
     }
 
     // Calculate visible range (middle 50% of screen)
@@ -93,6 +79,30 @@ fun TimelineScreen(
     }
     val autoPlayRangeStart = screenHeightPx * 0.25f // Top 25%
     val autoPlayRangeEnd = screenHeightPx * 0.75f   // Bottom 75%
+
+    // Find the post with video in the auto-play range
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            listState.layoutInfo.visibleItemsInfo.firstNotNullOfOrNull { itemInfo ->
+                val post = filteredPosts.getOrNull(itemInfo.index)
+                if (post != null && post.media.any { it.type == MediaType.VIDEO }) {
+                    val itemTop = itemInfo.offset.toFloat()
+                    val itemBottom = itemTop + itemInfo.size
+                    val itemCenter = (itemTop + itemBottom) / 2f
+
+                    if (itemCenter in autoPlayRangeStart..autoPlayRangeEnd) {
+                        post.id
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
+            }
+        }.collect { activePostId ->
+            viewModel.setActiveVideoPost(activePostId)
+        }
+    }
 
     // Detect if at top
     val isAtTop by remember {
@@ -116,6 +126,18 @@ fun TimelineScreen(
         onToggleBottomBar(hideBottomBar)
     }
 
+    // Determine active video based on visible items
+    LaunchedEffect(listState, filteredPosts) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }
+            .collect { indices ->
+                val targetId = indices.sorted().firstNotNullOfOrNull { idx ->
+                    val p = filteredPosts.getOrNull(idx)
+                    if (p?.media?.any { it.type == MediaType.VIDEO } == true) p.id else null
+                }
+                viewModel.setActiveVideoPost(targetId)
+            }
+    }
+
     // Show error in Snackbar
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -136,11 +158,7 @@ fun TimelineScreen(
             }
     }
 
-    LaunchedEffect(hideBottomBar) {
-        onToggleBottomBar(hideBottomBar)
-    }
-
-    // Show video player fullscreen (without Scaffold to hide bottom bar)
+    // Show video player fullscreen
     if (showVideo && videoUrl != null) {
         VideoPlayerScreen(
             videoUrl = videoUrl!!,
@@ -150,49 +168,45 @@ fun TimelineScreen(
             }
         )
     } else if (showGallery) {
-        // Show image gallery fullscreen (without Scaffold)
-        ImageGalleryOverlay(
+        FullscreenImageGallery(
             images = galleryImages,
             startIndex = galleryStartIndex,
             onDismiss = { showGallery = false }
         )
     } else {
-        // Main timeline UI with Scaffold (shows bottom bar in parent)
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            TopAppBar(
-                title = { Text("タイムライン") }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onCreatePost) {
-                Icon(Icons.Default.Add, contentDescription = "投稿作成")
-            }
-        }
-    ) {
-        PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
-            onRefresh = { 
-                println("[TimelineScreen] Pull to refresh triggered")
-                viewModel.refreshHead(roomId) 
+        Scaffold(
+            modifier = modifier,
+            topBar = {
+                TopAppBar(
+                    title = { Text("タイムライン") }
+                )
             },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding)
-        ) {
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            floatingActionButton = {
+                FloatingActionButton(onClick = onCreatePost) {
+                    Icon(Icons.Default.Add, contentDescription = "投稿作成")
+                }
+            }
+        ) { paddingValues ->
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = { 
+                    println("[TimelineScreen] Pull to refresh triggered")
+                    viewModel.refreshHead(roomId) 
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding)
+                    .padding(paddingValues)
+            ) {
                 Column {
-                    // Filter bar
                     CategoryFilterBar(
                         selectedFilter = uiState.selectedFilter,
                         onFilterSelected = viewModel::setFilter,
                     )
 
-                    // Posts list
                     when {
                         uiState.isLoading && filteredPosts.isEmpty() -> {
-                            println("[TimelineScreen] Showing initial loading")
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
@@ -202,7 +216,6 @@ fun TimelineScreen(
                         }
 
                         filteredPosts.isEmpty() && !uiState.isLoading -> {
-                            println("[TimelineScreen] No posts available")
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
@@ -212,39 +225,25 @@ fun TimelineScreen(
                         }
 
                         else -> {
-                            println("[TimelineScreen] Showing ${filteredPosts.size} posts")
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                // New badge
                                 if (uiState.newBadgeCount > 0 && !isAtTop) {
                                     item {
                                         NewPostsBadge(
                                             count = uiState.newBadgeCount,
-                                            onClick = {
-                                                viewModel.revealPending()
-                                            }
+                                            onClick = { viewModel.revealPending() }
                                         )
                                     }
                                 }
 
-                                // Posts
                                 items(
                                     items = filteredPosts,
                                     key = { it.id }
                                 ) { post ->
-                                    // Calculate if this item is in auto-play range
-                                    val itemInfo = listState.layoutInfo.visibleItemsInfo
-                                        .find { it.key == post.id }
-                                    
-                                    val isInAutoPlayRange = itemInfo?.let { info ->
-                                        val itemTop = info.offset.toFloat()
-                                        val itemBottom = itemTop + info.size
-                                        val itemCenter = (itemTop + itemBottom) / 2f
-                                        
-                                        itemCenter in autoPlayRangeStart..autoPlayRangeEnd
-                                    } ?: false
+                                    // Only this post's video should play if it's the active one
+                                    val shouldPlayVideo = uiState.activeVideoPostId == post.id
 
                                     TimelinePostCard(
                                         post = post,
@@ -265,14 +264,13 @@ fun TimelineScreen(
                                                 showGallery = true
                                             }
                                         },
-                                        isVisible = isInAutoPlayRange,
+                                        isVisible = shouldPlayVideo,
                                         isMuted = isMuted,
                                         onMuteToggle = { isMuted = !isMuted },
                                         modifier = Modifier
                                     )
                                 }
 
-                                // Loading indicator at bottom
                                 if (uiState.isLoading && filteredPosts.isNotEmpty()) {
                                     item {
                                         Box(
@@ -291,66 +289,5 @@ fun TimelineScreen(
                 }
             }
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ImageGalleryOverlay(
-    images: List<String>,
-    startIndex: Int,
-    onDismiss: () -> Unit,
-) {
-    if (images.isEmpty()) return
-    val pagerState = rememberPagerState(
-        initialPage = startIndex.coerceIn(0, images.lastIndex),
-        pageCount = { images.size }
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.95f)),
-        contentAlignment = Alignment.Center
-    ) {
-        HorizontalPager(state = pagerState) { page ->
-            MediaImageItem(
-                url = images[page],
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black),
-                height = 0
-            )
-        }
-
-        IconButton(
-            onClick = onDismiss,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "閉じる",
-                tint = Color.White
-            )
-        }
-
-        androidx.compose.material3.AssistChip(
-            onClick = {},
-            label = {
-                Text(
-                    text = "${pagerState.currentPage + 1} / ${images.size}",
-                    color = Color.White
-                )
-            },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp),
-            colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(
-                containerColor = Color.White.copy(alpha = 0.2f),
-                labelColor = Color.White
-            )
-        )
     }
 }
