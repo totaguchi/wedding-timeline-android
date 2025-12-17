@@ -10,6 +10,7 @@ import com.ttaguchi.weddingtimeline.domain.model.TimelineFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -42,6 +43,8 @@ class TimelineViewModel(
     private var lastSnapshot: DocumentSnapshot? = null
     private val pendingPosts = mutableListOf<TimeLinePost>()
     private var listenJob: Job? = null
+    private val mutedAuthorIds = mutableSetOf<String>()
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 
     /**
      * Fetch posts with pagination.
@@ -56,6 +59,7 @@ class TimelineViewModel(
 
         viewModelScope.launch {
             try {
+                loadMutedAuthors(roomId)
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
                 println("[TimelineViewModel] Starting fetch...")
 
@@ -67,11 +71,12 @@ class TimelineViewModel(
 
                 println("[TimelineViewModel] Fetched ${result.posts.size} posts")
 
-                val newList = if (reset) {
+                val combined = if (reset) {
                     result.posts
                 } else {
                     (_uiState.value.posts + result.posts).distinctBy { it.id }
                 }
+                val newList = filterMuted(combined)
 
                 _uiState.value = _uiState.value.copy(
                     posts = newList,
@@ -106,7 +111,7 @@ class TimelineViewModel(
                 println("[TimelineViewModel] Refresh completed with ${result.posts.size} posts")
                 
                 _uiState.value = _uiState.value.copy(
-                    posts = result.posts,
+                    posts = filterMuted(result.posts),
                     isRefreshing = false,
                     newBadgeCount = 0,
                     error = null
@@ -133,6 +138,7 @@ class TimelineViewModel(
         
         listenJob?.cancel()
         listenJob = viewModelScope.launch {
+            loadMutedAuthors(roomId)
             repository.listenLatestWithIsLiked(roomId).collectLatest { payload ->
                 handleNewPosts(payload.posts)
             }
@@ -141,7 +147,9 @@ class TimelineViewModel(
 
     private fun handleNewPosts(newPosts: List<TimeLinePost>) {
         val existingIds = _uiState.value.posts.map { it.id }.toSet()
-        val actuallyNew = newPosts.filter { it.id !in existingIds }
+        val actuallyNew = newPosts
+            .filter { it.id !in existingIds }
+            .filterNot { mutedAuthorIds.contains(it.authorId) }
         
         if (actuallyNew.isEmpty()) {
             println("[TimelineViewModel] No new posts to handle")
@@ -152,7 +160,7 @@ class TimelineViewModel(
         
         if (_uiState.value.isAtTop) {
             _uiState.value = _uiState.value.copy(
-                posts = (actuallyNew + _uiState.value.posts).distinctBy { it.id }
+                posts = filterMuted(actuallyNew + _uiState.value.posts).distinctBy { it.id }
             )
         } else {
             pendingPosts.addAll(actuallyNew)
@@ -168,7 +176,7 @@ class TimelineViewModel(
         if (pendingPosts.isEmpty()) return
         
         _uiState.value = _uiState.value.copy(
-            posts = (pendingPosts.toList() + _uiState.value.posts).distinctBy { it.id },
+            posts = filterMuted(pendingPosts.toList() + _uiState.value.posts).distinctBy { it.id },
             newBadgeCount = 0
         )
         pendingPosts.clear()
@@ -183,7 +191,7 @@ class TimelineViewModel(
     }
 
     fun toggleLike(post: TimeLinePost, roomId: String) {
-        val currentUser = FirebaseAuth.getInstance().currentUser ?: return
+        val currentUser = auth.currentUser ?: return
         val userId = currentUser.uid
 
         viewModelScope.launch {
@@ -203,6 +211,45 @@ class TimelineViewModel(
         }
     }
 
+    fun muteAuthor(roomId: String, authorId: String, mute: Boolean = true) {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                repository.setMute(roomId, uid, authorId, mute)
+                if (mute) mutedAuthorIds.add(authorId) else mutedAuthorIds.remove(authorId)
+                _uiState.update { state ->
+                    state.copy(posts = filterMuted(state.posts))
+                }
+            } catch (e: Exception) {
+                println("[TimelineViewModel] muteAuthor error: ${e.message}")
+            }
+        }
+    }
+
+    fun deletePost(roomId: String, postId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deletePost(roomId, postId)
+                _uiState.update { state ->
+                    state.copy(posts = state.posts.filterNot { it.id == postId })
+                }
+            } catch (e: Exception) {
+                println("[TimelineViewModel] deletePost error: ${e.message}")
+            }
+        }
+    }
+
+    fun reportPost(roomId: String, postId: String, reason: String = "inappropriate") {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                repository.reportPost(roomId, postId, uid, reason)
+            } catch (e: Exception) {
+                println("[TimelineViewModel] reportPost error: ${e.message}")
+            }
+        }
+    }
+
     fun setFilter(filter: TimelineFilter) {
         _uiState.value = _uiState.value.copy(selectedFilter = filter)
     }
@@ -210,9 +257,9 @@ class TimelineViewModel(
     fun getFilteredPosts(): List<TimeLinePost> {
         val filter = _uiState.value.selectedFilter
         return if (filter == TimelineFilter.ALL) {
-            _uiState.value.posts
+            filterMuted(_uiState.value.posts)
         } else {
-            _uiState.value.posts.filter { post ->
+            filterMuted(_uiState.value.posts).filter { post ->
                 when (filter) {
                     TimelineFilter.CEREMONY -> post.tag == com.ttaguchi.weddingtimeline.domain.model.PostTag.CEREMONY
                     TimelineFilter.RECEPTION -> post.tag == com.ttaguchi.weddingtimeline.domain.model.PostTag.RECEPTION
@@ -230,9 +277,26 @@ class TimelineViewModel(
         _uiState.value = _uiState.value.copy(activeVideoPostId = postId)
     }
 
+    fun isAuthorMuted(authorId: String): Boolean = mutedAuthorIds.contains(authorId)
+
     override fun onCleared() {
         super.onCleared()
         listenJob?.cancel()
         println("[TimelineViewModel] Listener removed")
+    }
+
+    private fun filterMuted(posts: List<TimeLinePost>): List<TimeLinePost> =
+        posts.filterNot { mutedAuthorIds.contains(it.authorId) }
+
+    private fun loadMutedAuthors(roomId: String) {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            val muted = repository.fetchMutedUserIds(roomId, uid)
+            mutedAuthorIds.clear()
+            mutedAuthorIds.addAll(muted)
+            _uiState.update { state ->
+                state.copy(posts = filterMuted(state.posts))
+            }
+        }
     }
 }

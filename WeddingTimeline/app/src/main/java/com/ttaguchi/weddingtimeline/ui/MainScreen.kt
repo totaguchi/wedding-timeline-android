@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.ttaguchi.weddingtimeline.domain.model.Session
+import com.ttaguchi.weddingtimeline.ui.bestpost.BestPostScreen
 import com.ttaguchi.weddingtimeline.ui.timeline.TimelineScreen
 
 @Composable
@@ -32,7 +33,7 @@ fun MainScreen(
     onCreatePost: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    var hideBottomBar by remember { mutableStateOf(false) } // 型を明示的に指定
+    var hideBottomBar by remember { mutableStateOf(false) }
 
     // roomIdがnullの場合はローディング表示
     val roomId = session.roomId
@@ -69,9 +70,14 @@ fun MainScreen(
                 onCreatePost = onCreatePost,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = paddingValues,
-                onToggleBottomBar = { hide: Boolean -> hideBottomBar = hide } // ラムダの型を明示
+                onToggleBottomBar = { hide: Boolean -> hideBottomBar = hide }
             )
-            1 -> BestPostScreen(modifier = Modifier.padding(paddingValues))
+            1 -> BestPostScreen(
+                roomId = roomId,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = paddingValues,
+                onToggleBottomBar = { hide: Boolean -> hideBottomBar = hide }
+            )
             2 -> SettingsScreen(modifier = Modifier.padding(paddingValues))
         }
     }
@@ -81,16 +87,6 @@ enum class TabItem(val title: String, val icon: ImageVector) {
     TIMELINE("タイムライン", Icons.Default.Home),
     BEST_POST("ベストポスト", Icons.Default.Star),
     SETTINGS("設定", Icons.Default.Settings),
-}
-
-@Composable
-fun BestPostScreen(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("ベストポスト画面（実装予定）")
-    }
 }
 
 @Composable

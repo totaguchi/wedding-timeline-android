@@ -7,8 +7,10 @@ import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QueryDocumentSnapshot
+import com.google.firebase.firestore.Source
 import com.google.firebase.storage.FirebaseStorage
 import com.ttaguchi.weddingtimeline.domain.model.Media
 import com.ttaguchi.weddingtimeline.domain.model.MediaDto
@@ -38,6 +40,12 @@ class PostRepository(
 
     private fun postsCollection(roomId: String) =
         db.collection("rooms").document(roomId).collection("posts")
+
+    // mutes: rooms/{roomId}/mutes/{ownerUid}/users/{targetUid}
+    private fun muteDocRef(roomId: String, ownerUid: String, targetUid: String): DocumentReference =
+        db.collection("rooms").document(roomId)
+            .collection("mutes").document(ownerUid)
+            .collection("users").document(targetUid)
 
     private fun likeRef(roomId: String, postId: String, uid: String): DocumentReference =
         db.collection("rooms").document(roomId)
@@ -318,6 +326,52 @@ class PostRepository(
     }
 
     /**
+     * Delete a post document (media cleanup is not handled here).
+     */
+    suspend fun deletePost(roomId: String, postId: String) {
+        val roomIdSan = roomId.trim()
+        postsCollection(roomIdSan).document(postId).delete().await()
+    }
+
+    /**
+     * Report a post by writing a report entry under the post.
+     */
+    suspend fun reportPost(roomId: String, postId: String, reporterId: String, reason: String) {
+        val roomIdSan = roomId.trim()
+        require(roomIdSan.isNotEmpty()) { "roomId is empty" }
+
+        val reasonSan = reason.trim()
+
+        val reportRef = postsCollection(roomIdSan).document(postId)
+            .collection("reports")
+            .document(reporterId) // Use reporterId as document ID
+
+        val payload = mapOf(
+            "reason" to reasonSan,
+            "reporterUid" to reporterId,
+            "roomId" to roomIdSan,
+            "postId" to postId,
+            "createdAt" to FieldValue.serverTimestamp(),
+        )
+
+        try {
+            reportRef.set(payload).await()
+            println("[PostRepository] reportPost successful: postId=$postId, reporterId=$reporterId")
+        } catch (e: Exception) {
+            // Check if it's a PermissionDenied error (already reported)
+            if (e is FirebaseFirestoreException &&
+                e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                // 既に通報済み（=ドキュメントが存在して update 扱いになった）等。
+                // read も禁止されているため厳密判定できないので、通報済みとして扱う。
+                println("[PostRepository] reportPost ignored (already reported or no permission): ${e.message}")
+                return
+            }
+            // Other errors should be thrown
+            throw e
+        }
+    }
+
+    /**
      * Upload media file to Firebase Storage.
      * Returns the download URL.
      */
@@ -329,6 +383,37 @@ class PostRepository(
         
         println("[PostRepository] Uploaded media to: $downloadUrl")
         return downloadUrl.toString()
+    }
+
+    /**
+     * Mute/unmute a user for the current viewer in a room.
+     */
+    suspend fun setMute(roomId: String, ownerUid: String, targetUid: String, mute: Boolean) {
+        val roomIdSan = roomId.trim()
+        val ref = muteDocRef(roomIdSan, ownerUid, targetUid)
+        if (mute) {
+            ref.set(mapOf("createdAt" to FieldValue.serverTimestamp())).await()
+        } else {
+            ref.delete().await()
+        }
+    }
+
+    /**
+     * Fetch muted user ids for the current viewer in a room.
+     */
+    suspend fun fetchMutedUserIds(roomId: String, ownerUid: String): Set<String> {
+        val roomIdSan = roomId.trim()
+        return try {
+            val snap = db.collection("rooms").document(roomIdSan)
+                .collection("mutes").document(ownerUid)
+                .collection("users")
+                .get(Source.SERVER)
+                .await()
+            snap.documents.map { it.id }.toSet()
+        } catch (e: Exception) {
+            println("[PostRepository] fetchMutedUserIds error: ${e.message}")
+            emptySet()
+        }
     }
 }
 

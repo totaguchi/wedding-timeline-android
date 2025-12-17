@@ -1,5 +1,6 @@
 package com.ttaguchi.weddingtimeline.ui.timeline
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -66,7 +67,21 @@ fun TimelineScreen(
     var videoUrl by remember { mutableStateOf<String?>(null) }
     var showVideo by remember { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(true) }
-    val hideBottomBar = showVideo || showGallery
+    var selectedPostId by remember { mutableStateOf<String?>(null) }
+    val selectedPost = remember(uiState.posts, selectedPostId) {
+        uiState.posts.firstOrNull { it.id == selectedPostId }
+    }
+    val hideBottomBar = showVideo || showGallery || selectedPost != null
+
+    BackHandler(enabled = selectedPost != null && !showVideo && !showGallery) {
+        selectedPostId = null
+    }
+
+    LaunchedEffect(selectedPostId, selectedPost) {
+        if (selectedPostId != null && selectedPost == null) {
+            selectedPostId = null
+        }
+    }
 
     val filteredPosts = remember(uiState.posts, uiState.selectedFilter) {
         viewModel.getFilteredPosts()
@@ -126,18 +141,6 @@ fun TimelineScreen(
         onToggleBottomBar(hideBottomBar)
     }
 
-    // Determine active video based on visible items
-    LaunchedEffect(listState, filteredPosts) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }
-            .collect { indices ->
-                val targetId = indices.sorted().firstNotNullOfOrNull { idx ->
-                    val p = filteredPosts.getOrNull(idx)
-                    if (p?.media?.any { it.type == MediaType.VIDEO } == true) p.id else null
-                }
-                viewModel.setActiveVideoPost(targetId)
-            }
-    }
-
     // Show error in Snackbar
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -159,127 +162,167 @@ fun TimelineScreen(
     }
 
     // Show video player fullscreen
-    if (showVideo && videoUrl != null) {
-        VideoPlayerScreen(
-            videoUrl = videoUrl!!,
-            onBackClick = {
-                showVideo = false
-                videoUrl = null
-            }
-        )
-    } else if (showGallery) {
-        FullscreenImageGallery(
-            images = galleryImages,
-            startIndex = galleryStartIndex,
-            onDismiss = { showGallery = false }
-        )
-    } else {
-        Scaffold(
-            modifier = modifier,
-            topBar = {
-                TopAppBar(
-                    title = { Text("タイムライン") }
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            floatingActionButton = {
-                FloatingActionButton(onClick = onCreatePost) {
-                    Icon(Icons.Default.Add, contentDescription = "投稿作成")
+    when {
+        showVideo && videoUrl != null -> {
+            VideoPlayerScreen(
+                videoUrl = videoUrl!!,
+                onBackClick = {
+                    showVideo = false
+                    videoUrl = null
                 }
-            }
-        ) { paddingValues ->
-            PullToRefreshBox(
-                isRefreshing = uiState.isRefreshing,
-                onRefresh = { 
-                    println("[TimelineScreen] Pull to refresh triggered")
-                    viewModel.refreshHead(roomId) 
+            )
+        }
+        showGallery -> {
+            FullscreenImageGallery(
+                images = galleryImages,
+                startIndex = galleryStartIndex,
+                onDismiss = { showGallery = false }
+            )
+        }
+        selectedPost != null -> {
+            val post = selectedPost!!
+            PostDetailScreen(
+                post = post,
+                onBackClick = { selectedPostId = null },
+                onLikeClick = { viewModel.toggleLike(post, roomId) },
+                onImageClick = { index ->
+                    val images = post.media
+                        .filter { it.type == MediaType.IMAGE }
+                        .map { it.url }
+                    if (images.isNotEmpty()) {
+                        galleryImages = images
+                        galleryStartIndex = index
+                        showGallery = true
+                    }
                 },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(contentPadding)
-                    .padding(paddingValues)
-            ) {
-                Column {
-                    CategoryFilterBar(
-                        selectedFilter = uiState.selectedFilter,
-                        onFilterSelected = viewModel::setFilter,
-                    )
+                onVideoClick = { url ->
+                    videoUrl = url
+                    showVideo = true
+                },
+                onDelete = {
+                    viewModel.deletePost(post.roomId, post.id)
+                    selectedPostId = null
+                },
+                onReport = { reason ->
+                    viewModel.reportPost(post.roomId, post.id, reason)
+                    selectedPostId = null
+                },
+                onMuteAuthor = { mute ->
+                    viewModel.muteAuthor(post.roomId, post.authorId, mute)
+                    selectedPostId = null
+                },
+                isAuthorMuted = viewModel.isAuthorMuted(post.authorId),
+                isVideoVisible = true,
+                isMuted = isMuted,
+                onMuteToggle = { isMuted = !isMuted }
+            )
+        }
+        else -> {
+            Scaffold(
+                modifier = modifier,
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                floatingActionButton = {
+                    FloatingActionButton(onClick = onCreatePost) {
+                        Icon(Icons.Default.Add, contentDescription = "投稿作成")
+                    }
+                }
+            ) { paddingValues ->
+                PullToRefreshBox(
+                    isRefreshing = uiState.isRefreshing,
+                    onRefresh = { 
+                        println("[TimelineScreen] Pull to refresh triggered")
+                        viewModel.refreshHead(roomId) 
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding)
+                        .padding(paddingValues)
+                ) {
+                    Column {
+                        CategoryFilterBar(
+                            selectedFilter = uiState.selectedFilter,
+                            onFilterSelected = viewModel::setFilter,
+                        )
 
-                    when {
-                        uiState.isLoading && filteredPosts.isEmpty() -> {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator()
+                        when {
+                            uiState.isLoading && filteredPosts.isEmpty() -> {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
                             }
-                        }
 
-                        filteredPosts.isEmpty() && !uiState.isLoading -> {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("まだ投稿がありません")
+                            filteredPosts.isEmpty() && !uiState.isLoading -> {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("まだ投稿がありません")
+                                }
                             }
-                        }
 
-                        else -> {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                if (uiState.newBadgeCount > 0 && !isAtTop) {
-                                    item {
-                                        NewPostsBadge(
-                                            count = uiState.newBadgeCount,
-                                            onClick = { viewModel.revealPending() }
+                            else -> {
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    if (uiState.newBadgeCount > 0 && !isAtTop) {
+                                        item {
+                                            NewPostsBadge(
+                                                count = uiState.newBadgeCount,
+                                                onClick = { viewModel.revealPending() }
+                                            )
+                                        }
+                                    }
+
+                                    items(
+                                        items = filteredPosts,
+                                        key = { it.id }
+                                    ) { post ->
+                                        // Only this post's video should play if it's the active one
+                                        val shouldPlayVideo = uiState.activeVideoPostId == post.id
+
+                                        TimelinePostCard(
+                                            post = post,
+                                            onLikeClick = {
+                                                viewModel.toggleLike(post, roomId)
+                                            },
+                                            onVideoClick = { url ->
+                                                videoUrl = url
+                                                showVideo = true
+                                            },
+                                            onImageClick = { index ->
+                                                val images = post.media
+                                                    .filter { it.type == MediaType.IMAGE }
+                                                    .map { it.url }
+                                                if (images.isNotEmpty()) {
+                                                    galleryImages = images
+                                                    galleryStartIndex = index
+                                                    showGallery = true
+                                                }
+                                            },
+                                            onPostClick = {
+                                                selectedPostId = post.id
+                                            },
+                                            isVisible = shouldPlayVideo,
+                                            isMuted = isMuted,
+                                            onMuteToggle = { isMuted = !isMuted },
+                                            modifier = Modifier
                                         )
                                     }
-                                }
 
-                                items(
-                                    items = filteredPosts,
-                                    key = { it.id }
-                                ) { post ->
-                                    // Only this post's video should play if it's the active one
-                                    val shouldPlayVideo = uiState.activeVideoPostId == post.id
-
-                                    TimelinePostCard(
-                                        post = post,
-                                        onLikeClick = {
-                                            viewModel.toggleLike(post, roomId)
-                                        },
-                                        onVideoClick = { url ->
-                                            videoUrl = url
-                                            showVideo = true
-                                        },
-                                        onImageClick = { index ->
-                                            val images = post.media
-                                                .filter { it.type == MediaType.IMAGE }
-                                                .map { it.url }
-                                            if (images.isNotEmpty()) {
-                                                galleryImages = images
-                                                galleryStartIndex = index
-                                                showGallery = true
+                                    if (uiState.isLoading && filteredPosts.isNotEmpty()) {
+                                        item {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                CircularProgressIndicator()
                                             }
-                                        },
-                                        isVisible = shouldPlayVideo,
-                                        isMuted = isMuted,
-                                        onMuteToggle = { isMuted = !isMuted },
-                                        modifier = Modifier
-                                    )
-                                }
-
-                                if (uiState.isLoading && filteredPosts.isNotEmpty()) {
-                                    item {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(16.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            CircularProgressIndicator()
                                         }
                                     }
                                 }
