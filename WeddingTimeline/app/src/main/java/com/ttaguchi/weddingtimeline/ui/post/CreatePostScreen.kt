@@ -1,9 +1,12 @@
 package com.ttaguchi.weddingtimeline.ui.post
 
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -58,19 +62,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
 import com.ttaguchi.weddingtimeline.domain.model.PostTag
 import com.ttaguchi.weddingtimeline.domain.model.Session
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,11 +99,24 @@ fun CreatePostScreen(
     var selectedMediaUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var isSubmitting by remember { mutableStateOf(false) }
 
+    val imageCount = remember(selectedMediaUris) {
+        selectedMediaUris.count { !isVideoUri(context, it) }
+    }
+    val videoCount = remember(selectedMediaUris) {
+        selectedMediaUris.count { isVideoUri(context, it) }
+    }
+
     // Media picker
     val mediaPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 4),
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 5),
         onResult = { uris ->
-            selectedMediaUris = uris
+            val (filtered, message) = filterMediaSelection(context, uris)
+            selectedMediaUris = filtered
+            message?.let {
+                scope.launch {
+                    snackbarHostState.showSnackbar(it)
+                }
+            }
         }
     )
 
@@ -207,7 +226,8 @@ fun CreatePostScreen(
 
                 // Media picker section
                 MediaPickerSection(
-                    selectedMediaCount = selectedMediaUris.size,
+                    imageCount = imageCount,
+                    videoCount = videoCount,
                     onPickMedia = {
                         mediaPickerLauncher.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
@@ -273,17 +293,20 @@ private fun TextInputSection(
 
 @Composable
 private fun MediaPickerSection(
-    selectedMediaCount: Int,
+    imageCount: Int,
+    videoCount: Int,
     onPickMedia: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val canPickMore = imageCount < 4 || videoCount < 1
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         OutlinedButton(
             onClick = onPickMedia,
-            enabled = selectedMediaCount < 4,
+            enabled = canPickMore,
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = Color.White,
                 contentColor = Color(0xFF536471)
@@ -298,9 +321,9 @@ private fun MediaPickerSection(
             )
         }
 
-        if (selectedMediaCount > 0) {
+        if (imageCount > 0 || videoCount > 0) {
             Text(
-                text = "$selectedMediaCount / 4",
+                text = "画像 $imageCount / 4  動画 $videoCount / 1",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF536471),
                 modifier = Modifier.align(Alignment.CenterVertically)
@@ -395,61 +418,86 @@ private fun MediaThumbnail(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val mimeType = remember(uri) {
-        context.contentResolver.getType(uri) ?: ""
-    }
-    val isVideo = mimeType.startsWith("video/")
+    val isVideo = remember(uri) { isVideoUri(context, uri) }
+    val videoThumbnail by rememberVideoThumbnail(context, uri, isVideo)
 
     Box(modifier = modifier) {
-        // 画像・動画のサムネイル表示
-        SubcomposeAsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(uri)
-                .crossfade(true)
-                .build(),
-            contentDescription = if (isVideo) "選択された動画" else "選択された画像",
-            modifier = Modifier
-                .size(110.dp)
-                .clip(RoundedCornerShape(12.dp)),
-            contentScale = ContentScale.Crop
-        ) {
-            when (painter.state) {
-                is AsyncImagePainter.State.Loading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFFEFF3F4)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = Color(0xFF536471),
-                            strokeWidth = 2.dp
-                        )
-                    }
+        if (isVideo) {
+            if (videoThumbnail != null) {
+                Image(
+                    bitmap = videoThumbnail!!.asImageBitmap(),
+                    contentDescription = "選択された動画",
+                    modifier = Modifier
+                        .size(110.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(110.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFEFF3F4)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF536471),
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
-                is AsyncImagePainter.State.Error -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFFEFF3F4)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (isVideo) Icons.Default.PlayCircle else Icons.Default.Image,
-                            contentDescription = null,
-                            tint = Color(0xFF536471),
-                            modifier = Modifier.size(32.dp)
-                        )
+            }
+        } else {
+            // 画像のサムネイル表示
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(uri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "選択された画像",
+                modifier = Modifier
+                    .size(110.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            ) {
+                when (painter.state) {
+                    is AsyncImagePainter.State.Loading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFFEFF3F4)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color(0xFF536471),
+                                strokeWidth = 2.dp
+                            )
+                        }
                     }
-                }
-                else -> {
-                    SubcomposeAsyncImageContent()
+                    is AsyncImagePainter.State.Error -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFFEFF3F4)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = null,
+                                tint = Color(0xFF536471),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                    else -> {
+                        SubcomposeAsyncImageContent()
+                    }
                 }
             }
         }
 
-        // 動画の場合は再生アイコンを表示
         if (isVideo) {
             Icon(
                 imageVector = Icons.Default.PlayCircle,
@@ -463,7 +511,6 @@ private fun MediaThumbnail(
             )
         }
 
-        // 削除ボタン
         IconButton(
             onClick = onRemove,
             modifier = Modifier
@@ -480,6 +527,62 @@ private fun MediaThumbnail(
             )
         }
     }
+}
+
+private fun isVideoUri(context: android.content.Context, uri: Uri): Boolean {
+    val mimeType = context.contentResolver.getType(uri) ?: ""
+    return mimeType.startsWith("video/")
+}
+
+@Composable
+private fun rememberVideoThumbnail(
+    context: android.content.Context,
+    uri: Uri,
+    isVideo: Boolean
+) = produceState<Bitmap?>(initialValue = null, key1 = uri, key2 = isVideo) {
+    if (!isVideo) return@produceState
+    value = withContext(Dispatchers.IO) {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, uri)
+            retriever.getFrameAtTime(0)
+        } catch (e: Exception) {
+            null
+        } finally {
+            retriever.release()
+        }
+    }
+}
+
+private fun filterMediaSelection(
+    context: android.content.Context,
+    uris: List<Uri>
+): Pair<List<Uri>, String?> {
+    val videos = mutableListOf<Uri>()
+    val images = mutableListOf<Uri>()
+    for (uri in uris) {
+        if (isVideoUri(context, uri)) {
+            videos.add(uri)
+        } else {
+            images.add(uri)
+        }
+    }
+
+    val limitedVideos = videos.take(1)
+    val limitedImages = images.take(4)
+    val filtered = (limitedVideos + limitedImages).distinct()
+
+    val message = when {
+        videos.size > 1 && images.size > 4 ->
+            "動画は1つまで、画像は4枚まで選択できます。"
+        videos.size > 1 ->
+            "動画は1つまで選択できます。"
+        images.size > 4 ->
+            "画像は4枚まで選択できます。"
+        else -> null
+    }
+
+    return filtered to message
 }
 
 @Composable
