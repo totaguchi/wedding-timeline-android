@@ -14,17 +14,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.ttaguchi.weddingtimeline.data.UserPreferences
+import com.ttaguchi.weddingtimeline.ui.legal.TermsAgreementScreen
 import com.ttaguchi.weddingtimeline.ui.MainScreen
 import com.ttaguchi.weddingtimeline.ui.login.LoginScreen
 import com.ttaguchi.weddingtimeline.ui.post.CreatePostScreen
 import com.ttaguchi.weddingtimeline.ui.theme.WeddingTimelineTheme
 import com.ttaguchi.weddingtimeline.viewmodel.SessionViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val sessionViewModel: SessionViewModel by viewModels()
@@ -42,11 +47,34 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppContent(sessionViewModel = sessionViewModel)
+                    WeddingTimelineApp(sessionViewModel = sessionViewModel)
                 }
             }
         }
     }
+}
+
+@Composable
+private fun WeddingTimelineApp(
+    sessionViewModel: SessionViewModel,
+) {
+    val context = LocalContext.current
+    val userPreferences = remember { UserPreferences(context) }
+    val acceptedTerms by userPreferences.acceptedTerms.collectAsState(initial = false)
+    val scope = rememberCoroutineScope()
+
+    if (!acceptedTerms) {
+        TermsAgreementScreen(
+            onAgree = {
+                scope.launch {
+                    userPreferences.setAcceptedTerms(true)
+                }
+            }
+        )
+        return
+    }
+
+    AppContent(sessionViewModel = sessionViewModel)
 }
 
 @Composable
