@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Favorite
@@ -29,6 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ttaguchi.weddingtimeline.domain.model.PostTag
 import com.ttaguchi.weddingtimeline.domain.model.TimeLinePost
+import androidx.compose.ui.res.painterResource
+import com.ttaguchi.weddingtimeline.ui.common.resolveAvatarResId
 
 /**
  * X (Twitter) style post item.
@@ -70,9 +73,10 @@ fun TimelinePostCard(
                     .background(Color(0xFFE8D4F8)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = post.userIcon.ifEmpty { "👤" },
-                    style = MaterialTheme.typography.titleLarge
+                Image(
+                    painter = painterResource(id = resolveAvatarResId(post.userIcon)),
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp)
                 )
             }
 

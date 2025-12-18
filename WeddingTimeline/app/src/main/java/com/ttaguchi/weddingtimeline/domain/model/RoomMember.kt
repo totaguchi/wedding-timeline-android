@@ -8,6 +8,7 @@ import com.google.firebase.Timestamp
 data class RoomMember(
     val id: String,
     val username: String,
+    val usernameLower: String = "",
     val userIcon: String = "",
     val role: String = "member",
     val joinedAt: Timestamp? = null,

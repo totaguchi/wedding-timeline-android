@@ -5,14 +5,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -28,6 +32,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // アプリ起動時にセッション状態を初期化（Swift の .task { await session.bootstrapOnLaunch() } に相当）
+        sessionViewModel.bootstrapOnLaunch(applicationContext)
+
         setContent {
             WeddingTimelineTheme {
                 Surface(
@@ -45,24 +53,39 @@ class MainActivity : ComponentActivity() {
 private fun AppContent(
     sessionViewModel: SessionViewModel,
 ) {
+    val context = LocalContext.current
     val session by sessionViewModel.session.collectAsState()
+    val isInitialized by sessionViewModel.isInitialized.collectAsState()
     val navController = rememberNavController()
 
-    val startDestination = if (session.isLoggedIn) "main" else "login"
+    // 初期化中はローディング表示
+    if (!isInitialized) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
-    LaunchedEffect(session.isLoggedIn) {
+    // isLoggedIn（member != null）かつ roomId が揃った時のみメイン画面に遷移
+    val shouldShowMain = session.isLoggedIn && session.roomId != null
+    val startDestination = if (shouldShowMain) "main" else "login"
+
+    LaunchedEffect(shouldShowMain) {
         val currentRoute = navController.currentBackStackEntry?.destination?.route
-        if (session.isLoggedIn) {
+        if (shouldShowMain) {
             if (currentRoute == "login") {
                 navController.navigate("main") {
                     popUpTo("login") { inclusive = true }
                     launchSingleTop = true
                 }
             }
-        } else {
-            if (currentRoute != "login") {
+        } else if (!session.isLoggedIn) {
+            if (currentRoute == "main" || currentRoute == "createPost") {
                 navController.navigate("login") {
-                    popUpTo(0)
+                    popUpTo(0) { inclusive = true }
                     launchSingleTop = true
                 }
             }
@@ -76,7 +99,7 @@ private fun AppContent(
         composable("login") {
             LoginScreen(
                 onLoginSuccess = { roomId ->
-                    sessionViewModel.onJoinedRoom(roomId)
+                    sessionViewModel.onJoinedRoom(context, roomId)
                 }
             )
         }
@@ -86,6 +109,9 @@ private fun AppContent(
                 session = session,
                 onCreatePost = {
                     navController.navigate("createPost")
+                },
+                onBackToLogin = {
+                    sessionViewModel.signOut(context)
                 }
             )
         }
@@ -93,7 +119,7 @@ private fun AppContent(
         composable("createPost") {
             CreatePostScreen(
                 roomId = session.roomId ?: "",
-                session = session, // Session全体を渡す
+                session = session,
                 onPostCreated = {
                     navController.popBackStack()
                 },

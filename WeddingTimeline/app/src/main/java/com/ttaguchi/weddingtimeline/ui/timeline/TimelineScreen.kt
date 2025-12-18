@@ -226,7 +226,7 @@ fun TimelineScreen(
                         Icon(Icons.Default.Add, contentDescription = "投稿作成")
                     }
                 }
-            ) { paddingValues ->
+            ) { scaffoldPadding ->
                 PullToRefreshBox(
                     isRefreshing = uiState.isRefreshing,
                     onRefresh = { 
@@ -235,8 +235,8 @@ fun TimelineScreen(
                     },
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(contentPadding)
-                        .padding(paddingValues)
+                        .padding(contentPadding) // MainScreenからのpadding（下部ナビゲーションバー分）
+                        .padding(scaffoldPadding) // Scaffold自身のpadding
                 ) {
                     Column {
                         CategoryFilterBar(

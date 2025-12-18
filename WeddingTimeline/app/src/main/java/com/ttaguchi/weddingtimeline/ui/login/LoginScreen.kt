@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +32,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,11 +50,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ttaguchi.weddingtimeline.ui.common.resolveAvatarResId
 
 @Composable
 fun LoginScreen(
@@ -59,220 +66,233 @@ fun LoginScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showIconPicker by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFE8D4F8).copy(alpha = 0.2f),
-                        Color(0xFFB794F4).copy(alpha = 0.15f),
-                    )
-                )
+    // エラーが出たときにスナックバー表示し画面に留まる
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let { msg ->
+            snackbarHostState.showSnackbar(
+                message = msg,
+                duration = SnackbarDuration.Short
             )
-    ) {
-        Column(
+        }
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { scaffoldPadding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(scaffoldPadding)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFE8D4F8).copy(alpha = 0.2f),
+                            Color(0xFFB794F4).copy(alpha = 0.15f),
+                        )
+                    )
+                )
         ) {
-            // Header
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Wedding Timeline",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "大切な瞬間をみんなでシェア",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Input Card
-            Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .shadow(
-                        elevation = 18.dp,
-                        shape = RoundedCornerShape(24.dp),
-                        ambientColor = Color.Black.copy(alpha = 0.06f),
-                    ),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // Header
                 Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Room ID
-                    FieldLabel(
-                        icon = Icons.Outlined.MeetingRoom,
-                        title = "Room ID"
+                    Text(
+                        text = "Wedding Timeline",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
                     )
-                    CustomTextField(
-                        value = uiState.roomId,
-                        onValueChange = viewModel::updateRoomId,
-                        placeholder = "ルームIDを入力",
-                        enabled = !uiState.isLoading,
-                    )
-
-                    // Room Key
-                    FieldLabel(
-                        icon = Icons.Outlined.Key,
-                        title = "Room Key"
-                    )
-                    CustomTextField(
-                        value = uiState.roomKey,
-                        onValueChange = viewModel::updateRoomKey,
-                        placeholder = "ルームキーを入力",
-                        isPassword = true,
-                        enabled = !uiState.isLoading,
-                    )
-
-                    // Username
-                    FieldLabel(
-                        icon = Icons.Default.Person,
-                        title = "Username"
-                    )
-                    CustomTextField(
-                        value = uiState.username,
-                        onValueChange = viewModel::updateUsername,
-                        placeholder = "ユーザー名を入力",
-                        enabled = !uiState.isLoading,
-                    )
-
-                    // Avatar Icon
-                    FieldLabel(
-                        icon = Icons.Outlined.CameraAlt,
-                        title = "プロフィールアイコン"
-                    )
-                    AvatarSelector(
-                        selectedIcon = uiState.selectedIcon,
-                        onClick = { showIconPicker = true },
-                        enabled = !uiState.isLoading,
+                    Text(
+                        text = "大切な瞬間をみんなでシェア",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                // Error Message (top)
+                uiState.errorMessage?.let { error ->
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
 
-            // Join Button
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                Button(
-                    onClick = { viewModel.join(onLoginSuccess) },
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Input Card
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    enabled = !uiState.isLoading &&
-                            uiState.roomId.isNotBlank() &&
-                            uiState.roomKey.isNotBlank() &&
-                            uiState.username.isNotBlank() &&
-                            uiState.selectedIcon != null,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Transparent,
-                        disabledContainerColor = Color.Gray.copy(alpha = 0.3f),
-                    )
+                        .padding(horizontal = 16.dp)
+                        .shadow(
+                            elevation = 18.dp,
+                            shape = RoundedCornerShape(24.dp),
+                            ambientColor = Color.Black.copy(alpha = 0.06f),
+                        ),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
                 ) {
-                    Box(
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Room ID
+                        FieldLabel(
+                            icon = Icons.Outlined.MeetingRoom,
+                            title = "Room ID"
+                        )
+                        CustomTextField(
+                            value = uiState.roomId,
+                            onValueChange = viewModel::updateRoomId,
+                            placeholder = "ルームIDを入力",
+                            enabled = !uiState.isLoading,
+                        )
+
+                        // Room Key
+                        FieldLabel(
+                            icon = Icons.Outlined.Key,
+                            title = "Room Key"
+                        )
+                        CustomTextField(
+                            value = uiState.roomKey,
+                            onValueChange = viewModel::updateRoomKey,
+                            placeholder = "ルームキーを入力",
+                            isPassword = true,
+                            enabled = !uiState.isLoading,
+                        )
+
+                        // Username
+                        FieldLabel(
+                            icon = Icons.Default.Person,
+                            title = "Username"
+                        )
+                        CustomTextField(
+                            value = uiState.username,
+                            onValueChange = viewModel::updateUsername,
+                            placeholder = "ユーザー名を入力",
+                            enabled = !uiState.isLoading,
+                        )
+
+                        // Avatar Icon
+                        FieldLabel(
+                            icon = Icons.Outlined.CameraAlt,
+                            title = "プロフィールアイコン"
+                        )
+                        AvatarSelector(
+                            selectedIcon = uiState.selectedIcon,
+                            onClick = { showIconPicker = true },
+                            enabled = !uiState.isLoading,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Join Button
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.join(onLoginSuccess) },
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                if (uiState.isLoading ||
-                                    uiState.roomId.isBlank() ||
-                                    uiState.roomKey.isBlank() ||
-                                    uiState.username.isBlank() ||
-                                    uiState.selectedIcon == null
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        enabled = !uiState.isLoading &&
+                                uiState.roomId.isNotBlank() &&
+                                uiState.roomKey.isNotBlank() &&
+                                uiState.username.isNotBlank() &&
+                                uiState.selectedIcon != null,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Transparent,
+                            disabledContainerColor = Color.Gray.copy(alpha = 0.3f),
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    if (uiState.isLoading ||
+                                        uiState.roomId.isBlank() ||
+                                        uiState.roomKey.isBlank() ||
+                                        uiState.username.isBlank() ||
+                                        uiState.selectedIcon == null
+                                    ) {
+                                        Brush.horizontalGradient(
+                                            colors = listOf(
+                                                Color.Gray.copy(alpha = 0.3f),
+                                                Color.Gray.copy(alpha = 0.3f),
+                                            )
+                                        )
+                                    } else {
+                                        Brush.horizontalGradient(
+                                            colors = listOf(
+                                                Color(0xFFE8D4F8),
+                                                Color(0xFFB794F4),
+                                            )
+                                        )
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (uiState.isLoading) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            } else {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color.Gray.copy(alpha = 0.3f),
-                                            Color.Gray.copy(alpha = 0.3f),
-                                        )
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowForward,
+                                        contentDescription = null,
+                                        tint = Color.White,
                                     )
-                                } else {
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color(0xFFE8D4F8),
-                                            Color(0xFFB794F4),
-                                        )
+                                    Text(
+                                        text = "入室する",
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White,
                                     )
                                 }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (uiState.isLoading) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        } else {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowForward,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                )
-                                Text(
-                                    text = "入室する",
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White,
-                                )
                             }
                         }
                     }
                 }
-            }
 
-            // Error Message
-            uiState.errorMessage?.let { error ->
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
             }
         }
-    }
 
-    // Icon Picker Dialog
-    if (showIconPicker) {
-        IconPickerDialog(
-            icons = viewModel.icons,
-            selectedIcon = uiState.selectedIcon,
-            onIconSelected = { icon ->
-                viewModel.selectIcon(icon)
-                showIconPicker = false
-            },
-            onDismiss = { showIconPicker = false }
-        )
-    }
-
-    // ログイン成功時の処理
-    LaunchedEffect(uiState.loginSuccess) {
-        if (uiState.loginSuccess && uiState.joinedRoomId != null) {
-            onLoginSuccess(uiState.joinedRoomId!!)
+        // Icon Picker Dialog
+        if (showIconPicker) {
+            IconPickerDialog(
+                icons = viewModel.icons,
+                selectedIcon = uiState.selectedIcon,
+                onIconSelected = { icon ->
+                    viewModel.selectIcon(icon)
+                    showIconPicker = false
+                },
+                onDismiss = { showIconPicker = false }
+            )
         }
+
+        // Login success is handled in ViewModel callback
     }
 }
 
@@ -352,23 +372,33 @@ private fun AvatarSelector(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Icon preview
-        if (selectedIcon != null) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFE8D4F8)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = "👤", style = MaterialTheme.typography.headlineSmall)
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    if (selectedIcon != null) {
+                        Color(0xFFE8D4F8)
+                    } else {
+                        Color(0xFFE0E0E0).copy(alpha = 0.3f)
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selectedIcon != null) {
+                Image(
+                    painter = painterResource(id = resolveAvatarResId(selectedIcon)),
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = Color(0xFF9E9E9E),
+                    modifier = Modifier.size(28.dp)
+                )
             }
-        } else {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = Color.Gray
-            )
         }
 
         Column(
@@ -376,9 +406,14 @@ private fun AvatarSelector(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = selectedIcon ?: "アバター 1",
+                text = if (selectedIcon != null) selectedIcon else "未選択",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
+                color = if (selectedIcon != null) {
+                    Color.Unspecified
+                } else {
+                    Color(0xFF9E9E9E)
+                }
             )
             Text(
                 text = "タップして変更",

@@ -3,9 +3,11 @@ package com.ttaguchi.weddingtimeline.ui.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ttaguchi.weddingtimeline.data.RoomRepository
+import com.ttaguchi.weddingtimeline.request.JoinError
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -20,56 +22,44 @@ class LoginViewModel(
 
     // Available avatar icons
     val icons = listOf(
-        "👤", "👨", "👩", "👦", "👧",
-        "🧑", "👴", "👵", "👶", "🧒",
-        "👨‍💼", "👩‍💼", "👨‍🎓", "👩‍🎓", "👨‍🏫",
-        "👩‍🏫", "👨‍⚕️", "👩‍⚕️", "👨‍🌾", "👩‍🌾"
+        "oomimigitsune",
+        "lesser_panda",
+        "bear",
+        "todo",
+        "musasabi",
+        "rakko"
     )
 
     fun updateRoomId(value: String) {
-        _uiState.value = _uiState.value.copy(
-            roomId = value,
-            errorMessage = null
-        )
+        _uiState.update { it.copy(roomId = value, errorMessage = null) }
     }
 
     fun updateRoomKey(value: String) {
-        _uiState.value = _uiState.value.copy(
-            roomKey = value,
-            errorMessage = null
-        )
+        _uiState.update { it.copy(roomKey = value, errorMessage = null) }
     }
 
     fun updateUsername(value: String) {
-        _uiState.value = _uiState.value.copy(
-            username = value,
-            errorMessage = null
-        )
+        _uiState.update { it.copy(username = value, errorMessage = null) }
     }
 
     fun selectIcon(icon: String) {
-        _uiState.value = _uiState.value.copy(
-            selectedIcon = icon,
-            errorMessage = null
-        )
+        _uiState.update { it.copy(selectedIcon = icon, errorMessage = null) }
     }
 
     fun join(onSuccess: (String) -> Unit) {
+        // 多重実行ガード
+        if (_uiState.value.isLoading) return
+
         val state = _uiState.value
         if (state.roomId.isBlank() ||
             state.roomKey.isBlank() ||
             state.username.isBlank() ||
             state.selectedIcon == null) {
-            _uiState.value = state.copy(
-                errorMessage = "すべての項目を入力してください"
-            )
+            _uiState.update { it.copy(errorMessage = "すべての項目を入力してください") }
             return
         }
 
-        _uiState.value = state.copy(
-            isLoading = true,
-            errorMessage = null
-        )
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
         viewModelScope.launch {
             try {
@@ -79,18 +69,23 @@ class LoginViewModel(
                     username = state.username,
                     userIcon = state.selectedIcon
                 )
-
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    loginSuccess = true,
-                    joinedRoomId = state.roomId
-                )
+                // 成功時のみonSuccessを呼ぶ
+                _uiState.update { it.copy(isLoading = false) }
                 onSuccess(state.roomId)
+            } catch (e: JoinError) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message
+                    )
+                }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = e.message ?: "入室に失敗しました"
-                )
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "入室に失敗しました"
+                    )
+                }
             }
         }
     }
@@ -106,6 +101,4 @@ data class LoginUiState(
     val selectedIcon: String? = null,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val loginSuccess: Boolean = false,
-    val joinedRoomId: String? = null,
 )

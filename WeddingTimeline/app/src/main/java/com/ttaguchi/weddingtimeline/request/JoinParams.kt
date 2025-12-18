@@ -43,4 +43,6 @@ sealed class JoinError : Exception() {
         private fun readResolve(): Any = Unknown
         override val message: String = "不明なエラーが発生しました。"
     }
+
+    data class Message(override val message: String) : JoinError()
 }

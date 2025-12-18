@@ -2,12 +2,18 @@ package com.ttaguchi.weddingtimeline.data
 
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.Source
+import java.io.IOException
+import com.ttaguchi.weddingtimeline.domain.model.AppUser
+import com.ttaguchi.weddingtimeline.domain.model.AppUserDto
 import com.ttaguchi.weddingtimeline.domain.model.RoomMember
 import com.ttaguchi.weddingtimeline.domain.model.RoomMemberDto
 import com.ttaguchi.weddingtimeline.request.JoinError
@@ -29,11 +35,11 @@ class RoomRepository(
     private fun roomRef(roomId: String): DocumentReference =
         db.collection("rooms").document(roomId)
 
-    private fun secretRef(roomId: String): DocumentReference =
-        db.collection("roomSecrets").document(roomId)
-
     private fun memberRef(roomId: String, uid: String): DocumentReference =
         roomRef(roomId).collection("members").document(uid)
+
+    private fun userRef(uid: String): DocumentReference =
+        db.collection("users").document(uid)
 
     /**
      * Sign in anonymously if not already signed in.
@@ -75,42 +81,36 @@ class RoomRepository(
         val userNameSan = username.trim()
 
         // Validation
+        if (roomIdSan.isEmpty()) {
+            throw JoinError.Message("ルームIDを入力してください。")
+        }
+        if (roomKeySan.isEmpty()) {
+            throw JoinError.Message("入室キーを入力してください。")
+        }
+        if (userNameSan.isEmpty()) {
+            throw JoinError.Message("ユーザー名を入力してください。")
+        }
         if (userIcon.isEmpty()) {
             throw JoinError.IconNotSelected
         }
 
         // Ensure user is signed in
-        if (auth.currentUser == null) {
-            auth.signInAnonymously().await()
+        val uid = try {
+            signInAnonymouslyIfNeeded()
+        } catch (e: Exception) {
+            throw mapJoinError(e)
         }
-        val uid = auth.currentUser?.uid ?: throw JoinError.NotSignedIn
 
         // Check if user is already a member
-        val existed = isUserAlreadyInRoom(roomIdSan, uid)
+        val existed = try {
+            isUserAlreadyInRoom(roomIdSan, uid)
+        } catch (e: Exception) {
+            throw mapJoinError(e)
+        }
 
         val roomRef = roomRef(roomIdSan)
-        val secretRef = secretRef(roomIdSan)
         val memberRef = memberRef(roomIdSan, uid)
         val usernameLower = userNameSan.lowercase()
-
-        // Validate roomKey only for new members
-        if (!existed) {
-            try {
-                val secretSnap = secretRef.get(Source.SERVER).await()
-                if (!secretSnap.exists()) {
-                    throw IllegalArgumentException("このルームは存在しません")
-                }
-                val storedKey = secretSnap.getString("roomKey")
-                if (storedKey != roomKeySan) {
-                    throw JoinError.InvalidKey
-                }
-            } catch (e: JoinError.InvalidKey) {
-                throw e
-            } catch (e: Exception) {
-                println("[RoomRepository] roomKey validation failed: ${e.message}")
-                throw JoinError.Unknown
-            }
-        }
 
         // Check if user is banned
         if (existed) {
@@ -127,16 +127,16 @@ class RoomRepository(
             }
         }
 
-        // Run transaction
+        // NOTE: Do not read /roomSecrets on client.
+        // We write providedKey on first join and Firestore rules validate it server-side.
         try {
             db.runTransaction { transaction ->
                 if (existed) {
-                    // Update existing member: username, icon, lastSignedInAt
+                    // Update existing member: only allowed fields per Firestore rules
                     val updates = mapOf(
                         "username" to userNameSan,
-                        "usernameLower" to usernameLower,
-                        "lastSignedInAt" to FieldValue.serverTimestamp(),
                         "userIcon" to userIcon,
+                        "updatedAt" to FieldValue.serverTimestamp(),
                     )
                     transaction.set(memberRef, updates, com.google.firebase.firestore.SetOptions.merge())
                 } else {
@@ -149,8 +149,10 @@ class RoomRepository(
                         "lastSignedInAt" to FieldValue.serverTimestamp(),
                         "isBanned" to false,
                         "mutedUntil" to null,
+                        // Firestore rules validate roomKey via this field.
                         "providedKey" to roomKeySan,
                         "userIcon" to userIcon,
+                        "updatedAt" to FieldValue.serverTimestamp(),
                     )
                     transaction.set(memberRef, memberData)
                 }
@@ -158,13 +160,49 @@ class RoomRepository(
             }.await()
         } catch (e: Exception) {
             println("[RoomRepository] joinRoom transaction failed: ${e.message}")
-            throw JoinError.Unknown
+            throw mapJoinError(e)
         }
 
-        // Remove providedKey after creation
-        if (!existed) {
-            memberRef.update("providedKey", FieldValue.delete()).await()
+        // NOTE: With current Firestore rules, members/{uid} update is restricted to
+        // username/userIcon/updatedAt only, so we cannot delete providedKey after create.
+    }
+
+    private fun mapJoinError(error: Exception): JoinError {
+        val firebaseError = error as? FirebaseFirestoreException
+        if (firebaseError != null) {
+            val msg = when (firebaseError.code) {
+                FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+                    "入室に失敗しました。ルームIDまたは入室キーが正しいか確認してください。"
+                FirebaseFirestoreException.Code.NOT_FOUND ->
+                    "指定のルームが見つかりませんでした。ルームIDをご確認ください。"
+                FirebaseFirestoreException.Code.DEADLINE_EXCEEDED ->
+                    "タイムアウトしました。通信環境を確認して、もう一度お試しください。"
+                FirebaseFirestoreException.Code.UNAVAILABLE ->
+                    "サーバーに接続できませんでした。しばらくしてから再度お試しください。"
+                FirebaseFirestoreException.Code.CANCELLED ->
+                    "操作がキャンセルされました。再度お試しください。"
+                else -> "入室に失敗しました。しばらくしてから再度お試しください。"
+            }
+            return JoinError.Message(msg)
         }
+
+        val authError = error as? FirebaseAuthException
+        if (authError != null) {
+            val msg = when (authError.errorCode) {
+                "ERROR_NETWORK_REQUEST_FAILED" ->
+                    "ネットワークエラーのためサインインできませんでした。通信状況を確認して再度お試しください。"
+                "ERROR_TOO_MANY_REQUESTS" ->
+                    "リクエストが集中しています。時間をおいて再度お試しください。"
+                else -> "サインインに失敗しました。もう一度お試しください。"
+            }
+            return JoinError.Message(msg)
+        }
+
+        if (error is IOException) {
+            return JoinError.Message("ネットワークに接続できません。通信環境を確認して再度お試しください。")
+        }
+
+        return JoinError.Message("入室に失敗しました。しばらくしてから再度お試しください。")
     }
 
     /**
@@ -181,21 +219,19 @@ class RoomRepository(
         }
 
         val memberRef = memberRef(roomIdSan, uid)
-        val newLower = usernameSan.lowercase()
 
         try {
             db.runTransaction { transaction ->
                 // Username allows duplicates, no lock operation needed
                 val updates = mapOf(
                     "username" to usernameSan,
-                    "usernameLower" to newLower,
+                    "updatedAt" to FieldValue.serverTimestamp(),
                 )
                 transaction.set(memberRef, updates, com.google.firebase.firestore.SetOptions.merge())
                 null
             }.await()
         } catch (e: FirebaseFirestoreException) {
             println("[RoomRepository] changeUsername failed: ${e.message}")
-            // If permission denied (code 7), it might be uniqueness constraint
             if (e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
                 throw JoinError.UsernameTaken
             }
@@ -220,6 +256,84 @@ class RoomRepository(
         }.await()
     }
 
+    suspend fun deleteMyAccount(roomId: String) {
+        val uid = auth.currentUser?.uid ?: throw JoinError.NotSignedIn
+        val roomIdSan = roomId.trim()
+        val roomRef = roomRef(roomIdSan)
+
+        try {
+            // 1) Delete /rooms/{roomId}/userLikes/{uid}/posts/*
+            val userLikesPosts = roomRef
+                .collection("userLikes")
+                .document(uid)
+                .collection("posts")
+            batchDelete(userLikesPosts.orderBy(FieldPath.documentId()))
+
+            // 2) Delete collectionGroup("likes") where userId == uid && roomId == roomId
+            val likesGroup = db.collectionGroup("likes")
+                .whereEqualTo("userId", uid)
+                .whereEqualTo("roomId", roomIdSan)
+            batchDelete(likesGroup)
+
+            // 3) Delete authored posts and their likes subcollections
+            var last: DocumentSnapshot? = null
+            while (true) {
+                var query = roomRef.collection("posts")
+                    .whereEqualTo("authorId", uid)
+                    .orderBy(FieldPath.documentId())
+                    .limit(200)
+                if (last != null) {
+                    query = query.startAfter(last)
+                }
+                val snap = query.get(Source.SERVER).await()
+                if (snap.documents.isEmpty()) break
+
+                val batch = db.batch()
+                for (doc in snap.documents) {
+                    val postRef = doc.reference
+                    // Delete likes subcollection
+                    val likes = postRef.collection("likes").orderBy(FieldPath.documentId())
+                    batchDelete(likes)
+                    // Delete post itself
+                    batch.delete(postRef)
+                }
+                batch.commit().await()
+                last = snap.documents.lastOrNull()
+            }
+
+            // 4) Delete members/{uid}
+            memberRef(roomIdSan, uid).delete().await()
+
+            println("[RoomRepository] deleteMyAccount completed for uid=$uid in roomId=$roomIdSan")
+        } catch (e: Exception) {
+            println("[RoomRepository] deleteMyAccount failed: ${e.message}")
+            e.printStackTrace()
+            throw e
+        }
+    }
+
+    /**
+     * Batch delete query results with pagination.
+     */
+    private suspend fun batchDelete(query: Query, pageSize: Int = 300) {
+        var last: DocumentSnapshot? = null
+        while (true) {
+            var q = query.orderBy(FieldPath.documentId()).limit(pageSize.toLong())
+            if (last != null) {
+                q = q.startAfter(last)
+            }
+            val snap = q.get(Source.SERVER).await()
+            if (snap.documents.isEmpty()) break
+
+            val batch = db.batch()
+            for (doc in snap.documents) {
+                batch.delete(doc.reference)
+            }
+            batch.commit().await()
+            last = snap.documents.lastOrNull()
+        }
+    }
+
     /**
      * Check if user is already a member of the room.
      */
@@ -228,7 +342,6 @@ class RoomRepository(
         val memberRef = memberRef(roomIdSan, uid)
 
         return try {
-            // Use server source to avoid stale cache
             val snapshot = memberRef.get(Source.SERVER).await()
             snapshot.exists()
         } catch (e: Exception) {
@@ -238,20 +351,7 @@ class RoomRepository(
     }
 
     /**
-     * Check if room exists.
-     */
-    suspend fun roomExists(roomId: String): Boolean {
-        return try {
-            val snap = roomRef(roomId).get(Source.SERVER).await()
-            snap.exists()
-        } catch (e: Exception) {
-            println("[RoomRepository] roomExists check failed: ${e.message}")
-            false
-        }
-    }
-
-    /**
-     * Fetch room member data (single shot, server-first).
+     * Fetch room member profile (Swift: fetchRoomUser).
      * Returns minimal set for UI: username and userIcon.
      */
     suspend fun fetchRoomUser(roomId: String, uid: String): Pair<String, String?>? {
@@ -274,7 +374,51 @@ class RoomRepository(
     }
 
     /**
-     * Fetch member data.
+     * Fetch room member (full data).
+     */
+    suspend fun fetchRoomMember(roomId: String, uid: String): RoomMember {
+        val roomIdSan = roomId.trim()
+        val ref = memberRef(roomIdSan, uid)
+
+        return try {
+            val snap = ref.get(Source.SERVER).await()
+            toRoomMember(snap) ?: throw IllegalStateException("Member not found")
+        } catch (e: Exception) {
+            println("[RoomRepository] fetchRoomMember failed: ${e.message}")
+            throw e
+        }
+    }
+
+    /**
+     * Fetch user from /users/{uid}.
+     */
+    suspend fun fetchUser(uid: String): AppUser? {
+        return try {
+            val snap = userRef(uid).get(Source.SERVER).await()
+            if (!snap.exists()) return null
+            snap.toObject(AppUserDto::class.java)?.toDomain()
+        } catch (e: Exception) {
+            println("[RoomRepository] fetchUser failed for uid=$uid: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Fetch user's roomId from /users/{uid}.
+     * Returns null if user doesn't have a roomId or document doesn't exist.
+     */
+    suspend fun fetchUserRoomId(uid: String): String? {
+        return try {
+            val snap = userRef(uid).get(Source.SERVER).await()
+            snap.getString("roomId")
+        } catch (e: Exception) {
+            println("[RoomRepository] fetchUserRoomId failed for uid=$uid: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Fetch member data with source option.
      */
     suspend fun fetchMember(roomId: String, uid: String, source: Source = Source.DEFAULT): RoomMember? {
         return try {
@@ -306,15 +450,26 @@ class RoomRepository(
      */
     suspend fun isMember(roomId: String, uid: String): Boolean {
         return try {
-            // Try cache first
             val cacheSnap = memberRef(roomId, uid).get(Source.CACHE).await()
             if (cacheSnap.exists()) return true
 
-            // Fallback to server
             val serverSnap = memberRef(roomId, uid).get(Source.SERVER).await()
             serverSnap.exists()
         } catch (e: Exception) {
             println("[RoomRepository] isMember check failed: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Check if room exists.
+     */
+    suspend fun roomExists(roomId: String): Boolean {
+        return try {
+            val snap = roomRef(roomId).get(Source.SERVER).await()
+            snap.exists()
+        } catch (e: Exception) {
+            println("[RoomRepository] roomExists check failed: ${e.message}")
             false
         }
     }

@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -35,16 +34,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImagePainter
-import coil.compose.SubcomposeAsyncImage
-import coil.compose.SubcomposeAsyncImageContent
-import coil.request.ImageRequest
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import com.ttaguchi.weddingtimeline.domain.model.MediaType
 import com.ttaguchi.weddingtimeline.domain.model.TimeLinePost
 import com.ttaguchi.weddingtimeline.ui.timeline.components.FullscreenImageGallery
@@ -87,67 +83,62 @@ fun BestPostScreen(
             )
         }
         else -> {
-            Scaffold(
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = { viewModel.refreshBestPosts(roomId) },
                 modifier = modifier
-            ) { paddingValues ->
-                PullToRefreshBox(
-                    isRefreshing = uiState.isRefreshing,
-                    onRefresh = { viewModel.refreshBestPosts(roomId) },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPadding)
-                        .padding(paddingValues)
-                ) {
-                    when {
-                        uiState.isLoading && uiState.posts.isEmpty() -> {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
-                            }
+                    .fillMaxSize()
+                    .padding(contentPadding)
+            ) {
+                when {
+                    uiState.isLoading && uiState.posts.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
                         }
-                        uiState.posts.isEmpty() && !uiState.isLoading -> {
-                            EmptyBestPost()
-                        }
-                        else -> {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color(0xFFF8E9F3)),
-                                contentPadding = PaddingValues(vertical = 12.dp)
-                            ) {
-                                item { HeaderArea() }
+                    }
+                    uiState.posts.isEmpty() && !uiState.isLoading -> {
+                        EmptyBestPost()
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFFF8E9F3)),
+                            contentPadding = PaddingValues(vertical = 12.dp)
+                        ) {
+                            item { HeaderArea() }
 
-                                itemsIndexed(uiState.posts, key = { _, item -> item.id }) { index, post ->
-                                    RankedCard(
-                                        rank = index + 1,
-                                        post = post,
-                                        onLike = { viewModel.toggleLike(post, roomId) },
-                                        onVideo = { url ->
-                                            videoUrl = url
-                                            showVideo = true
-                                        },
-                                        onImage = { start ->
-                                            val images = post.media.filter { it.type == MediaType.IMAGE }.map { it.url }
-                                            if (images.isNotEmpty()) {
-                                                galleryImages = images
-                                                galleryStartIndex = start
-                                                showGallery = true
-                                            }
-                                        },
-                                        isMuted = isMuted,
-                                        onMuteToggle = { isMuted = !isMuted }
-                                    )
-                                }
-
-                                if (uiState.isLoading && uiState.posts.isNotEmpty()) {
-                                    item {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(16.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            CircularProgressIndicator()
+                            itemsIndexed(uiState.posts, key = { _, item -> item.id }) { index, post ->
+                                RankedCard(
+                                    rank = index + 1,
+                                    post = post,
+                                    onLike = { viewModel.toggleLike(post, roomId) },
+                                    onVideo = { url ->
+                                        videoUrl = url
+                                        showVideo = true
+                                    },
+                                    onImage = { start ->
+                                        val images = post.media.filter { it.type == MediaType.IMAGE }.map { it.url }
+                                        if (images.isNotEmpty()) {
+                                            galleryImages = images
+                                            galleryStartIndex = start
+                                            showGallery = true
                                         }
+                                    },
+                                    isMuted = isMuted,
+                                    onMuteToggle = { isMuted = !isMuted }
+                                )
+                            }
+
+                            if (uiState.isLoading && uiState.posts.isNotEmpty()) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator()
                                     }
                                 }
                             }
@@ -243,38 +234,14 @@ private fun RankedCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val context = LocalContext.current
-                    SubcomposeAsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(post.userIcon.takeIf { it.isNotBlank() })
-                            .build(),
+                    Image(
+                        painter = painterResource(id = com.ttaguchi.weddingtimeline.ui.common.resolveAvatarResId(post.userIcon)),
                         contentDescription = null,
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
                             .background(Color(0xFFEDEDED))
-                    ) {
-                        when (painter.state) {
-                            is AsyncImagePainter.State.Loading -> {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                }
-                            }
-                            is AsyncImagePainter.State.Error -> {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) { Text("👤") }
-                            }
-                            else -> SubcomposeAsyncImageContent()
-                        }
-                    }
+                    )
                     Column {
                         Text(text = post.authorName, fontWeight = FontWeight.Bold, color = Color.Black)
                         Text(text = "@${post.authorId}", color = Color.Gray, fontSize = 12.sp)

@@ -19,4 +19,13 @@ data class AppUserDto(
 
     @PropertyName("createdAt")
     val createdAt: Timestamp? = null,
-)
+) {
+    fun toDomain(): AppUser {
+        return AppUser(
+            id = id,
+            name = name,
+            icon = icon,
+            createdAt = createdAt
+        )
+    }
+}

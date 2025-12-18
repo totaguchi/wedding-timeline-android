@@ -1,6 +1,5 @@
 package com.ttaguchi.weddingtimeline.ui.login
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,10 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.ttaguchi.weddingtimeline.ui.common.resolveAvatarResId
 
 @Composable
 fun IconPickerDialog(
@@ -175,11 +176,10 @@ private fun AvatarCell(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            // TODO: Replace with actual avatar image using painterResource
-            // Example: Image(painter = painterResource(id = getAvatarResource(icon)), ...)
-            Text(
-                text = "👤",
-                style = MaterialTheme.typography.headlineMedium
+            Image(
+                painter = painterResource(id = resolveAvatarResId(icon)),
+                contentDescription = null,
+                modifier = Modifier.size(48.dp)
             )
         }
 
@@ -221,13 +221,4 @@ private fun AvatarCell(
 
 // Helper function to map icon names to drawable resources
 // TODO: Implement this based on your avatar resources
-private fun getAvatarResource(icon: String): Int {
-    // Example mapping:
-    // return when (icon) {
-    //     "avatar_1" -> R.drawable.avatar_1
-    //     "avatar_2" -> R.drawable.avatar_2
-    //     // ... etc
-    //     else -> R.drawable.default_avatar
-    // }
-    return 0 // Placeholder
-}
+// Avatar resource mapping moved to ui/common/AvatarResources.kt
