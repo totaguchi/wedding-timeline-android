@@ -6,10 +6,12 @@ import android.net.Uri
 import android.os.Environment
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -85,20 +88,23 @@ fun FullscreenImageGallery(
         }
 
         // Top bar with close and menu buttons
-        Box(
+        Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(16.dp)
+                .padding(top = statusBarSpacing(), end = 16.dp)
         ) {
             // Close button
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier.align(Alignment.CenterStart)
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .padding(6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "閉じる",
-                    tint = Color.White
+                    tint = Color.White,
+                    modifier = Modifier.padding(2.dp)
                 )
             }
 
@@ -106,13 +112,15 @@ fun FullscreenImageGallery(
             IconButton(
                 onClick = { showMenu = true },
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(start = 48.dp)
+                    .padding(start = 12.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .padding(6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
                     contentDescription = "メニュー",
-                    tint = Color.White
+                    tint = Color.White,
+                    modifier = Modifier.padding(2.dp)
                 )
             }
 
@@ -151,6 +159,10 @@ fun FullscreenImageGallery(
         )
     }
 }
+
+// Simple spacer for status bar height without needing WindowInsets (keeps composable decoupled)
+@Composable
+private fun statusBarSpacing(): Dp = 24.dp
 
 /**
  * Download image using DownloadManager.

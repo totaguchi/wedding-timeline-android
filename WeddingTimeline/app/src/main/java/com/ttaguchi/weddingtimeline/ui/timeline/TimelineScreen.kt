@@ -96,7 +96,7 @@ fun TimelineScreen(
     val autoPlayRangeEnd = screenHeightPx * 0.75f   // Bottom 75%
 
     // Find the post with video in the auto-play range
-    LaunchedEffect(listState) {
+    LaunchedEffect(listState, filteredPosts) {
         snapshotFlow {
             listState.layoutInfo.visibleItemsInfo.firstNotNullOfOrNull { itemInfo ->
                 val post = filteredPosts.getOrNull(itemInfo.index)
@@ -151,14 +151,16 @@ fun TimelineScreen(
     }
 
     // Handle scroll to end (pagination)
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-            .collect { lastIndex ->
-                if (lastIndex != null && lastIndex >= filteredPosts.size - 5 && filteredPosts.isNotEmpty()) {
-                    println("[TimelineScreen] Near end, triggering pagination")
-                    viewModel.fetchPosts(roomId, reset = false)
-                }
+    LaunchedEffect(listState, filteredPosts) {
+        snapshotFlow {
+            val lastIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+            Pair(lastIndex, filteredPosts.size)
+        }.collect { (lastIndex, size) ->
+            if (lastIndex != null && size > 0 && lastIndex >= size - 5) {
+                println("[TimelineScreen] Near end, triggering pagination: lastIndex=$lastIndex size=$size")
+                viewModel.fetchPosts(roomId, reset = false)
             }
+        }
     }
 
     // Show video player fullscreen

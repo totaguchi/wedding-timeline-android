@@ -231,13 +231,17 @@ fun VideoPlayerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.5f))
                     .statusBarsPadding()
-                    .padding(8.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Back button
-                IconButton(onClick = onBackClick) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                        .padding(6.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "戻る",
@@ -253,7 +257,10 @@ fun VideoPlayerScreen(
                     onClick = {
                         isMuted = !isMuted
                         exoPlayer.volume = if (isMuted) 0f else 1f
-                    }
+                    },
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                        .padding(6.dp)
                 ) {
                     Icon(
                         imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
@@ -264,7 +271,12 @@ fun VideoPlayerScreen(
 
                 // More menu button
                 Box {
-                    IconButton(onClick = { showMenu = true }) {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                            .padding(6.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "メニュー",

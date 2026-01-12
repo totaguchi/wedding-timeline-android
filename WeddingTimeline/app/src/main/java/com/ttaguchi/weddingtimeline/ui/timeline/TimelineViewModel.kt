@@ -45,6 +45,7 @@ class TimelineViewModel(
     private var listenJob: Job? = null
     private val mutedAuthorIds = mutableSetOf<String>()
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private var hasMore = true
 
     /**
      * Fetch posts with pagination.
@@ -57,8 +58,18 @@ class TimelineViewModel(
             return
         }
 
+        if (!reset && !hasMore) {
+            println("[TimelineViewModel] No more posts to load, skipping pagination")
+            return
+        }
+
         viewModelScope.launch {
             try {
+                if (reset) {
+                    hasMore = true
+                    lastSnapshot = null
+                }
+
                 loadMutedAuthors(roomId)
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
                 println("[TimelineViewModel] Starting fetch...")
@@ -85,6 +96,10 @@ class TimelineViewModel(
                 )
 
                 lastSnapshot = result.lastSnapshot
+                if (result.posts.size < 50 || result.lastSnapshot == null) {
+                    hasMore = false
+                    println("[TimelineViewModel] Reached end of collection (no more pages)")
+                }
             } catch (e: Exception) {
                 println("[TimelineViewModel] Error fetching posts: ${e.message}")
                 e.printStackTrace()

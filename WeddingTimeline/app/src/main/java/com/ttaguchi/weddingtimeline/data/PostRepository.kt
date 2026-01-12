@@ -5,6 +5,7 @@ import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -139,14 +140,16 @@ class PostRepository(
 
         var query: Query = postsCollection(roomId)
             .orderBy("createdAt", Query.Direction.DESCENDING)
+            .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING) // tie-breaker to keep pagination stable
             .limit(limit)
 
         startAfter?.let {
             query = query.startAfter(it)
+            println("[PostRepository] Applying startAfter: docId=${it.id}, createdAt=${it.get("createdAt")}")
         }
 
         try {
-            val snapshot = query.get().await()
+            val snapshot = query.get(com.google.firebase.firestore.Source.SERVER).await()
             println("[PostRepository] Query completed: size=${snapshot.size()}, isEmpty=${snapshot.isEmpty}")
             
             if (snapshot.isEmpty) {
@@ -154,7 +157,7 @@ class PostRepository(
                 return FetchPostsResult(posts = emptyList(), lastSnapshot = null)
             }
 
-            val docs = snapshot.documents.mapNotNull { it as? QueryDocumentSnapshot }
+            val docs = snapshot.documents.filterIsInstance<QueryDocumentSnapshot>()
             println("[PostRepository] Converted ${docs.size} documents")
 
             // ===== isLiked を一括収集（ユーザー/ルーム専用のミラー index から 1 クエリ） =====
@@ -181,7 +184,8 @@ class PostRepository(
                 println("[PostRepository] Post $index: id=${post.id}, content=${post.content.take(50)}, isLiked=${post.isLiked}")
             }
 
-            val lastSnap = docs.lastOrNull()
+            // Use the raw snapshot's last document to continue pagination reliably
+            val lastSnap = snapshot.documents.lastOrNull()
 
             return FetchPostsResult(posts = posts, lastSnapshot = lastSnap)
         } catch (e: Exception) {

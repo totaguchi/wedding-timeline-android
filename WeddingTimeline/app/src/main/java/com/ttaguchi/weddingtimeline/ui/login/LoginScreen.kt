@@ -17,6 +17,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Person
@@ -56,7 +57,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalFocusManager
 import com.ttaguchi.weddingtimeline.ui.common.resolveAvatarResId
+import androidx.compose.ui.input.pointer.pointerInput
 
 @Composable
 fun LoginScreen(
@@ -67,6 +70,7 @@ fun LoginScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showIconPicker by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val focusManager = LocalFocusManager.current
 
     // エラーが出たときにスナックバー表示し画面に留まる
     LaunchedEffect(uiState.errorMessage) {
@@ -94,6 +98,9 @@ fun LoginScreen(
                         )
                     )
                 )
+                .pointerInput(Unit) {
+                    detectTapGestures { focusManager.clearFocus() }
+                }
         ) {
             Column(
                 modifier = Modifier
